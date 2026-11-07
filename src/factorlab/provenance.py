@@ -10,6 +10,12 @@ import pandas as pd
 
 
 def snapshot(content: bytes, source: str, root: str | Path = ".cache") -> dict:
+    import os
+
+    if os.getenv("FACTORLAB_USERS_JSON"):
+        from factorlab.security import workspace_root
+
+        root = workspace_root()
     digest = hashlib.sha256(content).hexdigest()
     path = Path(root) / "snapshots" / digest
     path.parent.mkdir(parents=True, exist_ok=True)

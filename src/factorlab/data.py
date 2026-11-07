@@ -131,11 +131,35 @@ def download_prices_with_retry(ticker, start, end, attempts=3, delay=1):
     return pd.DataFrame()
 
 
-def load_prices(ticker: str, start: str, end: str | None) -> pd.Series:
+def load_prices(
+    ticker: str, start: str, end: str | None, refresh=False, cache_ttl=3600
+) -> pd.Series:
     """Download diário ajustado. `end` é exclusivo, conforme API Yahoo."""
     ticker = ticker.strip().upper()
     if not ticker or len(ticker.split()) != 1:
         raise ValueError("Informe um único ticker dos EUA, como AAPL ou SPY.")
+    import hashlib
+
+    from factorlab.security import workspace_root
+
+    cache = workspace_root() / "prices"
+    cache.mkdir(exist_ok=True)
+    key = hashlib.sha256(f"{ticker}|{start}|{end}".encode()).hexdigest()
+    path = cache / f"{key}.csv"
+    meta_path = cache / f"{key}.json"
+    if (
+        not refresh
+        and path.exists()
+        and meta_path.exists()
+        and time.time() - path.stat().st_mtime < cache_ttl
+    ):
+        close = pd.read_csv(path, index_col=0, parse_dates=True).iloc[:, 0].rename(ticker)
+        close.attrs["provenance"] = {
+            **json.loads(meta_path.read_text()),
+            "cache_used": True,
+            "ttl_seconds": cache_ttl,
+        }
+        return close
     frame = download_prices_with_retry(ticker, start, end)
     if frame.empty:
         raise ValueError(
@@ -151,6 +175,8 @@ def load_prices(ticker: str, start: str, end: str | None) -> pd.Series:
     close.attrs["provenance"] = snapshot(
         close.to_csv().encode(), f"Yahoo Finance adjusted close: {ticker}"
     )
+    path.write_text(close.to_csv(), encoding="utf-8")
+    meta_path.write_text(json.dumps(close.attrs["provenance"]), encoding="utf-8")
     return close
 
 
