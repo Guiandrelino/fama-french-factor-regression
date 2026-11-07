@@ -1,10 +1,11 @@
 """Workspaces de operação e pesquisa com tarefas limitadas por sessão."""
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from factorlab.alerts import exposure_alerts
-from factorlab.evaluation import performance_metrics, rolling_allocation
+from factorlab.execution import evaluate_execution
 from factorlab.operations import EXECUTOR
 from factorlab.security import backup_database, purge_snapshots, restore_database, workspace_root
 from factorlab.storage import AnalysisStore
@@ -12,8 +13,12 @@ from factorlab.uncertainty import allocation_sensitivity, bootstrap_risk, bootst
 
 
 def render_advanced(study, metadata, extras):
-    tabs = st.tabs(["EXECUTION LAB", "UNCERTAINTY", "EXPOSURE MONITOR", "WORKSPACE ADMIN"])
-    with tabs[0]:
+    section = st.radio(
+        "Workspace operacional",
+        ["EXECUÇÃO", "INCERTEZA", "ALERTAS", "ADMINISTRAÇÃO"],
+        horizontal=True,
+    )
+    if section == "EXECUÇÃO":
         assets = [a for a in study.returns if a not in {"Carteira", study.benchmark}]
         if not assets:
             assets = [study.benchmark]
@@ -28,35 +33,74 @@ def render_advanced(study, metadata, extras):
             import json
 
             try:
-                result, weights = rolling_allocation(
-                    study.returns[assets],
-                    window,
-                    policy,
-                    cost,
-                    band,
-                    cap,
+                if (
+                    st.session_state.get("execution_job")
+                    and not st.session_state["execution_job"].done()
+                ):
+                    raise ValueError("Uma avaliação já está em execução.")
+                parameters = dict(
+                    train_window=window,
+                    policy=policy,
+                    cost_bps=cost,
+                    band=band,
+                    max_weight=cap,
                     groups=json.loads(group_text),
                     group_caps=json.loads(caps_text),
                 )
-                comparison = result[["gross", "net"]].copy()
-                comparison["benchmark"] = study.returns.loc[result.index, study.benchmark]
-                comparison["equal_weight_gross"] = study.returns.loc[result.index, assets].mean(
-                    axis=1
+                rf = next(iter(study.results.values())).data.RF.copy()
+                st.session_state["execution_job"] = EXECUTOR.submit(
+                    evaluate_execution,
+                    study.returns[assets].copy(),
+                    study.returns[study.benchmark].copy(),
+                    rf,
+                    parameters,
                 )
-                extras["execution_returns"] = comparison
-                extras["execution_cost_turnover"] = result[["cost", "turnover"]]
-                extras["execution_metrics"] = performance_metrics(comparison)
-                extras["execution_weights"] = weights
+                st.session_state["execution_owner"] = metadata["created_at"]
+                st.session_state["execution_signature"] = str(parameters)
             except (ValueError, KeyError) as exc:
                 st.error(str(exc))
+        execution_job = st.session_state.get("execution_job")
+        import json
+
+        try:
+            current_execution = str(
+                dict(
+                    train_window=window,
+                    policy=policy,
+                    cost_bps=cost,
+                    band=band,
+                    max_weight=cap,
+                    groups=json.loads(group_text),
+                    group_caps=json.loads(caps_text),
+                )
+            )
+        except ValueError:
+            current_execution = None
+        if execution_job and st.session_state.get("execution_signature") != current_execution:
+            st.warning(
+                "Controles diferentes da última execução. Execute novamente para atualizar; resultados são identificados pelos parâmetros salvos."
+            )
+        if (
+            execution_job
+            and st.session_state.get("execution_owner") == metadata["created_at"]
+            and st.session_state.get("execution_signature") == current_execution
+        ):
+            if execution_job.done():
+                try:
+                    extras.update(execution_job.result())
+                except Exception as exc:
+                    st.error(str(exc))
+            else:
+                st.info("Avaliação em background; consulte o andamento.")
+                st.button("Consultar avaliação")
         if "execution_returns" in extras:
             st.plotly_chart(px.line((1 + extras["execution_returns"]).cumprod()), width="stretch")
             st.dataframe(extras["execution_metrics"], width="stretch")
             st.dataframe(extras["execution_cost_turnover"], width="stretch")
         st.caption(
-            "Janelas sucessivas sem retornos futuros. Referências benchmark/equiponderada são brutas; net desconta custos da estratégia. Sharpe usa RF=0, não é excesso sobre taxa livre de risco. Bandas podem violar temporariamente limites até o próximo rebalanceamento."
+            "Janelas sucessivas sem retornos futuros. Estratégia, benchmark e equiponderada líquidos usam os mesmos bps, incluindo entrada inicial; referências rebalanceiam mensalmente. Sharpe usa RF da amostra. Bandas podem violar limites entre rebalanceamentos."
         )
-    with tabs[1]:
+    if section == "INCERTEZA":
         key = st.selectbox(
             "Modelo para bootstrap", list(study.results), format_func=lambda x: " / ".join(x)
         )
@@ -74,9 +118,35 @@ def render_advanced(study, metadata, extras):
                 draws, weight_ci = bootstrap_weights(panel, reps, block, max_weight=1.0)
                 return risk_ci, draws, weight_ci, allocation_sensitivity(panel, max_weight=1.0)
 
-            st.session_state["bootstrap_job"] = EXECUTOR.submit(work)
+            try:
+                st.session_state["bootstrap_job"] = EXECUTOR.submit(work)
+                st.session_state["bootstrap_owner"] = metadata["created_at"]
+                st.session_state["bootstrap_parameters"] = {
+                    "asset_model": str(key),
+                    "repetitions": reps,
+                    "block": block,
+                    "seed": 42,
+                    "max_weight": 1.0,
+                }
+            except ValueError as exc:
+                st.error(str(exc))
         job = st.session_state.get("bootstrap_job")
-        if job is not None:
+        current_bootstrap = {
+            "asset_model": str(key),
+            "repetitions": reps,
+            "block": block,
+            "seed": 42,
+            "max_weight": 1.0,
+        }
+        if job is not None and st.session_state.get("bootstrap_parameters") != current_bootstrap:
+            st.warning(
+                "Parâmetros alterados: resultados anteriores não serão aplicados; aguarde e execute novamente."
+            )
+        if (
+            job is not None
+            and st.session_state.get("bootstrap_owner") == metadata["created_at"]
+            and st.session_state.get("bootstrap_parameters") == current_bootstrap
+        ):
             if st.button("Cancelar tarefa pendente"):
                 cancelled = job.cancel()
                 st.info(
@@ -88,6 +158,9 @@ def render_advanced(study, metadata, extras):
                     extras["bootstrap_risk_ci"] = ci
                     extras["bootstrap_weight_ci"] = weight_ci
                     extras["allocation_sensitivity"] = sensitivity
+                    extras["bootstrap_parameters"] = pd.DataFrame(
+                        [st.session_state["bootstrap_parameters"]]
+                    )
                     st.dataframe(ci, width="stretch")
                     st.plotly_chart(px.box(draws), width="stretch")
                     st.dataframe(weight_ci, width="stretch")
@@ -100,7 +173,7 @@ def render_advanced(study, metadata, extras):
         st.caption(
             "Moving-block bootstrap com seed fixa; intervalos percentis descritivos, sem garantia sob mudanças de regime. Alocação bootstrap long-only com máximo 100%; não representa automaticamente os limites de outra otimização."
         )
-    with tabs[2]:
+    if section == "ALERTAS":
         store = AnalysisStore(workspace_root() / "analyses.sqlite")
         saved = store.list()
         if not saved.empty:
@@ -126,7 +199,7 @@ def render_advanced(study, metadata, extras):
             )
         else:
             st.info("Salve uma análise para definir a referência.")
-    with tabs[3]:
+    if section == "ADMINISTRAÇÃO":
         root = workspace_root()
         store = AnalysisStore(root / "analyses.sqlite")
         st.download_button(

@@ -7,17 +7,26 @@ from factorlab.optimization import optimize_portfolio
 from factorlab.research import validate_panel
 
 
-def performance_metrics(returns):
+def performance_metrics(returns, rf=None):
     wealth = (1 + returns).cumprod()
     drawdown = wealth / wealth.cummax().clip(lower=1) - 1
     volatility = returns.std(ddof=1) * np.sqrt(12)
+    if rf is not None:
+        risk_free = rf.reindex(returns.index)
+        if risk_free.isna().any():
+            raise ValueError("RF ausente na avaliação.")
+        excess = returns.sub(risk_free, axis=0)
+    else:
+        excess = returns
     return pd.DataFrame(
         {
             "cumulative_return": wealth.iloc[-1] - 1,
             "annualized_return": wealth.iloc[-1] ** (12 / len(returns)) - 1,
             "vol_annual": volatility,
             "max_drawdown": drawdown.min(),
-            "sharpe_rf_zero": returns.mean() * 12 / volatility.replace(0, np.nan),
+            ("sharpe_excess" if rf is not None else "sharpe_rf_zero"): excess.mean()
+            * 12
+            / (excess.std(ddof=1) * np.sqrt(12)).replace(0, np.nan),
         }
     )
 
