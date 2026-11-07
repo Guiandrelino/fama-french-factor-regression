@@ -43,6 +43,9 @@ def render_research_tools(study, metadata, extras):
         st.caption(
             "Euler: beta × (Cov(fatores) × beta), mais variância residual. Inclui covariâncias; contribuições negativas são possíveis. Anualização ×12 pressupõe convenção sem autocovariâncias. Risco ex post, não previsão."
         )
+        for name in list(extras):
+            if name.startswith("risk_contributions_"):
+                del extras[name]
         extras[f"risk_contributions_{key[0]}_{key[1]}"] = table
     with tabs[1]:
         key = st.selectbox("Ativo/modelo do cenário", keys, format_func=lambda x: " / ".join(x))
@@ -62,6 +65,9 @@ def render_research_tools(study, metadata, extras):
         table, impact = stress_scenario(result, shocks)
         st.metric("Impacto sistemático mensal", f"{impact:.2%}")
         st.dataframe(table, width="stretch")
+        for name in list(extras):
+            if name.startswith(("custom_stress_", "historical_stress_")):
+                del extras[name]
         extras[f"custom_stress_{key[0]}_{key[1]}"] = table
         st.caption(
             "Retorno excedente condicionado aos choques. Alpha, RF, resíduos, não linearidades e custos não incluídos; não é VaR nem perda máxima."
@@ -91,7 +97,7 @@ def render_research_tools(study, metadata, extras):
         name = st.text_input("Nome da análise", "Minha análise")
         if st.button("Salvar análise local"):
             try:
-                identifier = store.save(name, study, metadata)
+                identifier = store.save(name, study, metadata, extras)
                 st.success(f"Análise salva: #{identifier}")
             except ValueError as exc:
                 st.error(str(exc))

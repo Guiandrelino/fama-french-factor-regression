@@ -167,6 +167,37 @@ def pdf_report(study: Study, metadata: dict, extras=None) -> bytes:
         ]
     )
     for name, frame in (extras or {}).items():
+        if (
+            "risk_contributions" in name
+            or "stress" in name
+            or name in {"execution_returns", "optimized_weights", "optimization_holdout"}
+        ):
+            numeric = frame.select_dtypes("number")
+            if not numeric.empty:
+                drawing = Drawing(480, 160)
+                values = numeric.iloc[:36, 0].to_numpy(dtype=float)
+                finite = [float(v) for v in values if float("-inf") < float(v) < float("inf")]
+                if len(finite) > 1:
+                    low, high = min(finite), max(finite)
+                    drawing.add(
+                        PolyLine(
+                            [
+                                (
+                                    20 + i * 440 / max(1, len(finite) - 1),
+                                    25 + (v - low) * 110 / max(high - low, 1e-12),
+                                )
+                                for i, v in enumerate(finite)
+                            ],
+                            strokeColor=colors.darkblue,
+                        )
+                    )
+                    story.append(
+                        Paragraph(
+                            "Gráfico: " + escape(str(numeric.columns[0])) + " (até 36 observações)",
+                            styles["Normal"],
+                        )
+                    )
+                    story.append(drawing)
         story.append(Paragraph(escape(str(name)), styles["Heading2"]))
         # Transpõe em registros para manter tabelas largas legíveis; limita tamanho explícito.
         for index, row in frame.head(60).iterrows():
