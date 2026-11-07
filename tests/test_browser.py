@@ -141,8 +141,8 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                 page.locator('[data-testid="stStatusWidget"]').wait_for(state="hidden")
                 page.get_by_text("Confirmo revisar a qualidade dos dados", exact=True).click()
                 page.get_by_role("button", name="Executar pesquisa", exact=True).click()
-                page.get_by_role("tab", name="Relatório e exportação").wait_for(timeout=60000)
-                page.get_by_role("tab", name="Relatório e exportação").click()
+                page.get_by_text("RELATÓRIOS", exact=True).wait_for(timeout=60000)
+                page.get_by_text("RELATÓRIOS", exact=True).click()
                 with page.expect_download() as bundle:
                     page.get_by_text("Baixar pacote consolidado ZIP", exact=True).click()
                 bundle_path = tmp_path / "bundle.zip"

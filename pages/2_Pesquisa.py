@@ -200,7 +200,10 @@ if run or audit_only:
             preliminary = compare(panel, factor_sets, benchmark, lags, window)
             panel = preliminary.returns
             extras = {f"quality_{name}": frame for name, frame in preview.items()}
-            st.session_state.pop("bootstrap_job", None)
+            for job_key in ["bootstrap_job", "execution_job"]:
+                job = st.session_state.pop(job_key, None)
+                if job is not None:
+                    job.cancel()
             if weights_text.strip():
                 weights = parse_weights(weights_text)
                 portfolio, history = portfolio_returns(panel, weights, policy)
@@ -296,116 +299,138 @@ if "study" in st.session_state:
     st.write(
         f"Amostra: {study.returns.index.min():%Y-%m} — {study.returns.index.max():%Y-%m} · {len(study.returns)} meses"
     )
-    tabs = st.tabs(
-        [
-            "Comparação",
-            "Carteira e benchmark",
-            "Modelos e estabilidade",
-            "Walk-forward",
-            "Relatório e exportação",
-        ]
+    workspace = st.radio(
+        "Estação de trabalho",
+        ["VISÃO GERAL", "RISCO E CARTEIRA", "OPERAÇÕES", "RELATÓRIOS"],
+        horizontal=True,
+        key="workspace_nav",
     )
-    with tabs[0]:
-        st.dataframe(study.summary, width="stretch")
-        selected = st.selectbox(
-            "Modelo do heatmap", list(study.summary.index.get_level_values("model").unique())
+    from contextlib import nullcontext
+
+    tabs = [nullcontext() for _ in range(5)]
+    if workspace == "VISÃO GERAL":
+        tabs = st.tabs(
+            [
+                "Comparação",
+                "Carteira e benchmark",
+                "Modelos e estabilidade",
+                "Walk-forward",
+                "Relatório e exportação",
+            ]
         )
-        betas = study.summary.xs(selected, level="model").filter(regex="^beta_")
-        st.plotly_chart(
-            px.imshow(
-                betas,
-                text_auto=".2f",
-                color_continuous_scale="RdBu_r",
-                color_continuous_midpoint=0,
-                title="Exposições aos fatores",
-            ),
-            width="stretch",
-        )
-    with tabs[1]:
-        st.plotly_chart(
-            px.line((1 + study.returns).cumprod(), title="Patrimônio normalizado · início = 1"),
-            width="stretch",
-        )
-        st.caption(
-            f"Benchmark: {study.benchmark}. Active return = 12 × média mensal da diferença; tracking error = desvio da diferença × √12."
-        )
-        if extras.get("portfolio_weights_beginning_of_month") is not None:
-            st.dataframe(extras["portfolio_weights_beginning_of_month"], width="stretch")
-            st.caption(
-                f"Política: {metadata['parameters']['policy']}. Pesos no início do mês. Sem custos, impostos ou aportes."
+    if workspace == "VISÃO GERAL":
+        with tabs[0]:
+            st.dataframe(study.summary, width="stretch")
+            selected = st.selectbox(
+                "Modelo do heatmap", list(study.summary.index.get_level_values("model").unique())
             )
-    with tabs[2]:
-        st.info(
-            "FF3/Carhart usam SMB da família FF3; FF5/FF6 usam SMB da família FF5. Mesma amostra não torna os modelos estritamente aninhados."
-        )
-        key = st.selectbox(
-            "Ativo/modelo para estabilidade",
-            list(study.results),
-            format_func=lambda x: " · ".join(x),
-        )
-        rolling = study.results[key].rolling
-        if not rolling.empty:
+            betas = study.summary.xs(selected, level="model").filter(regex="^beta_")
             st.plotly_chart(
-                px.line(rolling.drop(columns="alpha"), title="Betas móveis"), width="stretch"
-            )
-        st.caption(
-            "rolling_std_* na tabela: desvio dos coeficientes entre janelas sobrepostas (descritivo, não teste formal). AIC/BIC: critérios gaussianos convencionais."
-        )
-    with tabs[3]:
-        st.warning(
-            "Fatores do mês de teste são realizados: avaliação explicativa retrospectiva, NÃO previsão negociável."
-        )
-        if oos:
-            key = st.selectbox("Walk-forward", list(oos), format_func=lambda x: " · ".join(x))
-            frame = oos[key]
-            st.metric("RMSE fora da amostra", f"{np.sqrt(np.mean(frame.error**2)):.3%}")
-            st.plotly_chart(px.line(frame[["actual_excess", "explained_excess"]]), width="stretch")
-            st.dataframe(frame, width="stretch")
-        else:
-            st.info("Amostra insuficiente: reduza a janela ou aumente o intervalo.")
-        forecasts = {k: v for k, v in extras.items() if k.startswith("forecast_")}
-        st.subheader("Previsão ex ante com fatores defasados")
-        st.caption(
-            "Somente informações de meses anteriores. A defasagem é conservadora, mas não verifica datas históricas de publicação/revisão; não certifica backtest investível."
-        )
-        if forecasts:
-            chosen = st.selectbox("Previsão", list(forecasts))
-            predicted = forecasts[chosen]
-            st.metric("RMSE previsão", f"{np.sqrt(np.mean(predicted.error**2)):.3%}")
-            st.metric(
-                "RMSE referência: média histórica",
-                f"{np.sqrt(np.mean(predicted.baseline_error**2)):.3%}",
-            )
-            st.plotly_chart(
-                px.line(
-                    predicted[["actual_return", "predicted_return", "historical_mean_forecast"]]
+                px.imshow(
+                    betas,
+                    text_auto=".2f",
+                    color_continuous_scale="RdBu_r",
+                    color_continuous_midpoint=0,
+                    title="Exposições aos fatores",
                 ),
                 width="stretch",
             )
-            st.dataframe(predicted, width="stretch")
-        else:
-            st.info("Amostra insuficiente para previsão defasada.")
-    st.subheader("Risk & Portfolio Lab")
-    render_research_tools(study, metadata, extras)
+    if workspace == "VISÃO GERAL":
+        with tabs[1]:
+            st.plotly_chart(
+                px.line((1 + study.returns).cumprod(), title="Patrimônio normalizado · início = 1"),
+                width="stretch",
+            )
+            st.caption(
+                f"Benchmark: {study.benchmark}. Active return = 12 × média mensal da diferença; tracking error = desvio da diferença × √12."
+            )
+            if extras.get("portfolio_weights_beginning_of_month") is not None:
+                st.dataframe(extras["portfolio_weights_beginning_of_month"], width="stretch")
+                st.caption(
+                    f"Política: {metadata['parameters']['policy']}. Pesos no início do mês. Sem custos, impostos ou aportes."
+                )
+    if workspace == "VISÃO GERAL":
+        with tabs[2]:
+            st.info(
+                "FF3/Carhart usam SMB da família FF3; FF5/FF6 usam SMB da família FF5. Mesma amostra não torna os modelos estritamente aninhados."
+            )
+            key = st.selectbox(
+                "Ativo/modelo para estabilidade",
+                list(study.results),
+                format_func=lambda x: " · ".join(x),
+            )
+            rolling = study.results[key].rolling
+            if not rolling.empty:
+                st.plotly_chart(
+                    px.line(rolling.drop(columns="alpha"), title="Betas móveis"), width="stretch"
+                )
+            st.caption(
+                "rolling_std_* na tabela: desvio dos coeficientes entre janelas sobrepostas (descritivo, não teste formal). AIC/BIC: critérios gaussianos convencionais."
+            )
+    if workspace == "VISÃO GERAL":
+        with tabs[3]:
+            st.warning(
+                "Fatores do mês de teste são realizados: avaliação explicativa retrospectiva, NÃO previsão negociável."
+            )
+            if oos:
+                key = st.selectbox("Walk-forward", list(oos), format_func=lambda x: " · ".join(x))
+                frame = oos[key]
+                st.metric("RMSE fora da amostra", f"{np.sqrt(np.mean(frame.error**2)):.3%}")
+                st.plotly_chart(
+                    px.line(frame[["actual_excess", "explained_excess"]]), width="stretch"
+                )
+                st.dataframe(frame, width="stretch")
+            else:
+                st.info("Amostra insuficiente: reduza a janela ou aumente o intervalo.")
+            forecasts = {k: v for k, v in extras.items() if k.startswith("forecast_")}
+            st.subheader("Previsão ex ante com fatores defasados")
+            st.caption(
+                "Somente informações de meses anteriores. A defasagem é conservadora, mas não verifica datas históricas de publicação/revisão; não certifica backtest investível."
+            )
+            if forecasts:
+                chosen = st.selectbox("Previsão", list(forecasts))
+                predicted = forecasts[chosen]
+                st.metric("RMSE previsão", f"{np.sqrt(np.mean(predicted.error**2)):.3%}")
+                st.metric(
+                    "RMSE referência: média histórica",
+                    f"{np.sqrt(np.mean(predicted.baseline_error**2)):.3%}",
+                )
+                st.plotly_chart(
+                    px.line(
+                        predicted[["actual_return", "predicted_return", "historical_mean_forecast"]]
+                    ),
+                    width="stretch",
+                )
+                st.dataframe(predicted, width="stretch")
+            else:
+                st.info("Amostra insuficiente para previsão defasada.")
+    if workspace == "RISCO E CARTEIRA":
+        st.subheader("Risco e carteira")
+        render_research_tools(study, metadata, extras)
     from factorlab.advanced_ui import render_advanced
 
-    render_advanced(study, metadata, extras)
-    with tabs[4]:
+    if workspace == "OPERAÇÕES":
+        render_advanced(study, metadata, extras)
+    if workspace == "RELATÓRIOS":
+        selected_extras = st.multiselect(
+            "Conteúdo do relatório", list(extras), default=list(extras)
+        )
+        report_extras = {name: extras[name] for name in selected_extras}
         st.download_button(
             "Baixar relatório PDF",
-            pdf_report(study, metadata, extras),
+            pdf_report(study, metadata, report_extras),
             "report.pdf",
             "application/pdf",
         )
         st.download_button(
             "Baixar relatório HTML",
-            html_report(study, metadata, extras).encode(),
+            html_report(study, metadata, report_extras).encode(),
             "report.html",
             "text/html",
         )
         st.download_button(
             "Baixar pacote consolidado ZIP",
-            export_bundle(study, metadata, extras),
+            export_bundle(study, metadata, report_extras),
             "factorlab.zip",
             "application/zip",
         )
