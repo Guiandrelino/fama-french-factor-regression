@@ -85,7 +85,9 @@ def render_research_tools(study, metadata, extras):
             "Reaplicação de fatores observados aos betas da amostra atual: não usa as posições nem betas históricos da carteira."
         )
     with tabs[2]:
-        store = AnalysisStore()
+        from factorlab.security import workspace_root
+
+        store = AnalysisStore(workspace_root() / "analyses.sqlite")
         name = st.text_input("Nome da análise", "Minha análise")
         if st.button("Salvar análise local"):
             try:
@@ -118,7 +120,9 @@ def render_research_tools(study, metadata, extras):
                     }
                 )
                 try:
-                    st.dataframe(compare_saved(loaded, store.load(other)), width="stretch")
+                    delta = compare_saved(loaded, store.load(other))
+                    st.dataframe(delta, width="stretch")
+                    extras["saved_comparison"] = delta
                 except ValueError as exc:
                     st.info(str(exc))
                 st.caption(
@@ -183,6 +187,8 @@ def render_research_tools(study, metadata, extras):
                 weights, vol, performance = holdout_optimization(
                     panel, int(train), max_weight, ridge, exposures, bounds
                 )
+                extras["optimized_weights"] = weights.to_frame()
+                extras["optimization_holdout"] = performance
                 st.dataframe(weights.to_frame(), width="stretch")
                 st.metric("Volatilidade estimada no treino", f"{vol:.2%}")
                 st.plotly_chart(

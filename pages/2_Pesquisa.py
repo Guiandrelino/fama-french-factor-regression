@@ -11,8 +11,10 @@ import streamlit as st
 
 from factorlab.data import demo_data, load_factors, load_prices, month_index, monthly_returns
 from factorlab.forecast import forecast_walk_forward
+from factorlab.operations import classify_error
 from factorlab.provenance import cache_status, manifest
 from factorlab.providers import BR_MODELS, load_nefin
+from factorlab.quality import audit_panel, calendar_audit, source_health
 from factorlab.report import export_bundle, html_report, pdf_report
 from factorlab.research import (
     compare,
@@ -22,6 +24,7 @@ from factorlab.research import (
     walk_forward,
 )
 from factorlab.research_ui import render_research_tools
+from factorlab.security import workspace_root
 from factorlab.ui import context_strip, setup_terminal, welcome_cards
 
 st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="▥", layout="wide")
@@ -59,6 +62,8 @@ with st.sidebar:
     window = st.slider("Janela de estabilidade / treino", 24, 120, 60, step=12)
     forecast_lag = st.slider("Defasagem dos fatores para previsão (meses)", 1, 6, 2)
     refresh = st.checkbox("Atualizar fatores ao executar", value=False)
+    audit_only = st.button("Inspecionar dados antes da regressão")
+    quality_confirmed = st.checkbox("Confirmo revisar a qualidade dos dados", value=False)
     run = st.button("Executar pesquisa", type="primary")
 
 if st.button("Atualizar fatores agora"):
@@ -84,7 +89,13 @@ with st.expander("Qualidade e atualização das fontes"):
     else:
         st.info("Nenhum download de fatores registrado neste ambiente.")
 
-if run:
+if "quality_preview" in st.session_state:
+    with st.expander("DATA QUALITY / Auditoria pré-regressão", expanded=True):
+        for title, frame in st.session_state["quality_preview"].items():
+            st.caption(title)
+            st.dataframe(frame, width="stretch")
+
+if run or audit_only:
     st.session_state.pop("study", None)
     try:
         if start >= end or not models:
@@ -97,6 +108,12 @@ if run:
         if "Carteira" in tickers:
             raise ValueError("Nome Carteira é reservado.")
         all_tickers = list(dict.fromkeys([*tickers, benchmark]))
+        if len(all_tickers) > 12:
+            raise ValueError("Limite operacional: 12 ativos incluindo benchmark.")
+        if uploaded is not None and uploaded.size > 10_000_000:
+            raise ValueError("Upload excede 10 MB.")
+        progress = st.progress(0.05, text="01 / Aquisição e origem dos dados")
+        calendar_frames = {}
         with st.spinner("Executando pesquisa…"):
             is_br = market.startswith("Brasil")
             if source == "Demonstração":
@@ -117,13 +134,15 @@ if run:
                         )
                     if not is_br and any(t.endswith(".SA") for t in all_tickers):
                         raise ValueError("Ativos .SA exigem fatores Brasil / BRL.")
-                    series = {
-                        t: monthly_returns(
-                            load_prices(t, str(start), str(end)), "BMF" if is_br else "NYSE"
+                    series = {}
+                    for i, t in enumerate(all_tickers):
+                        prices = load_prices(t, str(start), str(end))
+                        calendar_frames[t] = calendar_audit(prices, "BMF" if is_br else "NYSE")
+                        series[t] = monthly_returns(prices, "BMF" if is_br else "NYSE")
+                        progress.progress(
+                            0.1 + 0.3 * (i + 1) / len(all_tickers), text=f"01 / Recebido {t}"
                         )
-                        for t in all_tickers
-                    }
-                    panel = pd.concat(series, axis=1, join="inner")
+                    panel = pd.concat(series, axis=1, join="outer")
                     panel.attrs["provenance"] = {
                         t: s.attrs.get("provenance", {}) for t, s in series.items()
                     }
@@ -132,7 +151,9 @@ if run:
                         raise ValueError("Envie CSV com date e uma coluna por ativo.")
                     from factorlab.provenance import snapshot
 
-                    raw_record = snapshot(uploaded.getvalue(), "Uploaded returns CSV")
+                    raw_record = snapshot(
+                        uploaded.getvalue(), "Uploaded returns CSV", workspace_root()
+                    )
                     frame = pd.read_csv(io.BytesIO(uploaded.getvalue()))
                     frame.index = month_index(frame.pop("date"))
                     frame.columns = frame.columns.str.strip().str.upper()
@@ -145,11 +166,41 @@ if run:
                     m: load_nefin(refresh=refresh) if is_br else load_factors(m, refresh=refresh)
                     for m in models
                 }
+            progress.progress(0.45, text="02 / Auditoria de qualidade antes dos cálculos")
+            quality, extremes, common = audit_panel(
+                panel, factor_sets, "BRL" if is_br else "USD", source
+            )
+            sources = source_health(
+                {
+                    **panel.attrs.get("provenance", {}),
+                    **{m: f.attrs.get("provenance", {}) for m, f in factor_sets.items()},
+                }
+            )
+            preview = {
+                "Histórico, faltantes e amostra descartada": quality,
+                "Retornos extremos |retorno| > 25% (revisar, não corrigir)": extremes,
+                "Origem e atualização (não é teste de disponibilidade em tempo real)": sources,
+            }
+            preview.update({f"Sessões ausentes {t}": f for t, f in calendar_frames.items()})
+            st.session_state["quality_preview"] = preview
+            if audit_only or (source != "Demonstração" and not quality_confirmed):
+                for title, frame in preview.items():
+                    st.caption(title)
+                    st.dataframe(frame, width="stretch")
+                st.info(
+                    "Revise as observações. Confirme a revisão e clique em Executar pesquisa. Nenhum valor foi corrigido."
+                )
+                progress.empty()
+                st.stop()
             panel = validate_panel(panel)
+            if len(panel) > 600:
+                raise ValueError("Limite operacional: 600 meses por estudo.")
+            progress.progress(0.6, text="03 / Estimação em amostra comum")
             # Constrói a carteira só depois de encontrar a mesma amostra para todos.
             preliminary = compare(panel, factor_sets, benchmark, lags, window)
             panel = preliminary.returns
-            extras = {}
+            extras = {f"quality_{name}": frame for name, frame in preview.items()}
+            st.session_state.pop("bootstrap_job", None)
             if weights_text.strip():
                 weights = parse_weights(weights_text)
                 portfolio, history = portfolio_returns(panel, weights, policy)
@@ -158,6 +209,7 @@ if run:
             else:
                 weights = {}
             study = compare(panel, factor_sets, benchmark, lags, window)
+            progress.progress(0.75, text="04 / Avaliação temporal e previsões")
             oos = {}
             for (asset, model), result in study.results.items():
                 if len(result.data) > window:
@@ -195,11 +247,25 @@ if run:
                     "calendar": "BMF" if is_br else "NYSE",
                 },
                 {"returns": study.returns, **{f"factors_{m}": f for m, f in factor_sets.items()}},
+                root=workspace_root(),
             )
+            metadata["data_stale"] = bool(
+                not sources.empty and sources.status.eq("desatualizada").any()
+            )
+            metadata["quality_policy"] = (
+                "Auditoria sem correção automática; extremos acima de 25% para revisão."
+            )
+            progress.progress(1.0, text="05 / Pesquisa concluída")
             st.session_state["study"] = study, metadata, extras, oos
     except Exception as exc:
         logging.getLogger(__name__).exception("Falha na pesquisa")
-        st.error(f"Pesquisa não concluída: {exc}")
+        category, hint = classify_error(exc)
+        st.session_state["quality_preview"] = {
+            "Falha de origem ou processamento": pd.DataFrame(
+                [{"status": "erro", "category": category, "message": str(exc)}]
+            )
+        }
+        st.error(f"[{category}] Pesquisa não concluída: {exc}. {hint}")
 
 if "study" not in st.session_state:
     context_strip(
@@ -321,13 +387,19 @@ if "study" in st.session_state:
             st.info("Amostra insuficiente para previsão defasada.")
     st.subheader("Risk & Portfolio Lab")
     render_research_tools(study, metadata, extras)
+    from factorlab.advanced_ui import render_advanced
+
+    render_advanced(study, metadata, extras)
     with tabs[4]:
         st.download_button(
-            "Baixar relatório PDF", pdf_report(study, metadata), "report.pdf", "application/pdf"
+            "Baixar relatório PDF",
+            pdf_report(study, metadata, extras),
+            "report.pdf",
+            "application/pdf",
         )
         st.download_button(
             "Baixar relatório HTML",
-            html_report(study, metadata).encode(),
+            html_report(study, metadata, extras).encode(),
             "report.html",
             "text/html",
         )

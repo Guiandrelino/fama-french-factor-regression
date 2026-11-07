@@ -23,7 +23,7 @@ def interpretation(result):
     )
 
 
-def html_report(study: Study, metadata: dict) -> str:
+def html_report(study: Study, metadata: dict, extras=None) -> str:
     sections = []
     for (asset, model), result in study.results.items():
         equation = "R − RF = " + f"{result.coefficients.loc['alpha', 'coefficient']:.6f}"
@@ -54,6 +54,10 @@ def html_report(study: Study, metadata: dict) -> str:
         + study.summary.to_html(escape=True)
         + chart
         + "".join(sections)
+        + "".join(
+            f"<h2>{escape(str(name))}</h2>" + frame.to_html(escape=True)
+            for name, frame in (extras or {}).items()
+        )
         + "<h2>Limitações</h2><p>HAC é assintótico. Múltiplos testes não são corrigidos. "
         "SMB FF3 e FF5 diferem. AIC/BIC são critérios gaussianos convencionais, não robustos "
         "a qualquer dependência dos erros. Custos e impostos não incluídos. "
@@ -64,7 +68,7 @@ def html_report(study: Study, metadata: dict) -> str:
     )
 
 
-def pdf_report(study: Study, metadata: dict) -> bytes:
+def pdf_report(study: Study, metadata: dict, extras=None) -> bytes:
     """PDF nativo sem navegador ou serviço externo."""
     from reportlab.graphics.shapes import Drawing, PolyLine, String
     from reportlab.lib import colors
@@ -162,6 +166,16 @@ def pdf_report(study: Study, metadata: dict) -> bytes:
             Paragraph(escape(json.dumps(metadata, ensure_ascii=False)), styles["Normal"]),
         ]
     )
+    for name, frame in (extras or {}).items():
+        story.append(Paragraph(escape(str(name)), styles["Heading2"]))
+        # Transpõe em registros para manter tabelas largas legíveis; limita tamanho explícito.
+        for index, row in frame.head(60).iterrows():
+            text = str(index) + ": " + "; ".join(f"{col}={value}" for col, value in row.items())
+            story.append(Paragraph(escape(text), styles["Normal"]))
+        if len(frame) > 60:
+            story.append(
+                Paragraph("Prévia de 60 linhas; dados completos no CSV do ZIP.", styles["Normal"])
+            )
     SimpleDocTemplate(buffer, rightMargin=1.5 * cm, leftMargin=1.5 * cm).build(story)
     return buffer.getvalue()
 
@@ -172,8 +186,8 @@ def export_bundle(study: Study, metadata: dict, extras=None) -> bytes:
         archive.writestr("summary.csv", study.summary.to_csv())
         archive.writestr("returns.csv", study.returns.to_csv())
         archive.writestr("manifest.json", json.dumps(metadata, ensure_ascii=False, indent=2))
-        archive.writestr("report.html", html_report(study, metadata))
-        archive.writestr("report.pdf", pdf_report(study, metadata))
+        archive.writestr("report.html", html_report(study, metadata, extras))
+        archive.writestr("report.pdf", pdf_report(study, metadata, extras))
         # Identificadores numéricos evitam caminhos fornecidos pelo usuário dentro do ZIP.
         for i, ((asset, model), result) in enumerate(study.results.items()):
             prefix = f"analyses/{i:03d}"
