@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.cache/
+outputs/
+install.log
+docker-build.log
+playwright-report/
+test-results/
+.coverage
+coverage.xml
+htmlcov/
