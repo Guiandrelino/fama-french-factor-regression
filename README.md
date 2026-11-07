@@ -1,52 +1,135 @@
-# FactorLab · Fama–French Factor Regression
+# FactorLab · Financial Research Terminal
 
-Projeto Python com dashboard Streamlit e CLI para estimar CAPM, Fama–French 3 fatores e 5 fatores em retornos mensais de ativos americanos em USD. Inclui erros-padrão HAC/Newey–West, diagnósticos, betas móveis e exportação.
+Terminal de pesquisa quantitativa para **regressões de fatores, comparação de ativos, análise de carteiras, decomposição de risco e otimização com restrições**. Construído em Python e Streamlit, com identidade visual azul-marinho, preto, branco e verde.
 
-## Novidades da versão 0.2 · página Pesquisa
+Usa dados reais de **Yahoo Finance**, **Kenneth French** e **NEFIN**, além de CSV próprio e demonstração sintética explicitamente identificada. Não é uma plataforma de cotações em tempo real nem de execução de ordens.
 
-Comparação de ativos e benchmark, carteira com rebalanceamento mensal ou buy-and-hold, comparação em amostra comum, momentum, Brasil/NEFIN, walk-forward, relatório HTML, ZIP consolidado e rastreabilidade SHA-256.
+> **[Documentação completa do projeto →](docs/PROJECT_GUIDE.md)** — arquitetura, instalação, metodologia, uso, fontes, persistência, relatórios, testes e limitações.
 
-**[Guia completo da página Pesquisa](docs/research.md)**. Abra pelo link na página inicial ou navegação lateral. Inclui instruções de CI e Docker, metodologia da carteira, calendários NYSE/BMF e termos de uso da fonte brasileira. PDF nativo disponível por ReportLab, além do HTML e ZIP. Previsão ex ante com fatores defasados é separada da avaliação explicativa.
+## Funcionalidades
 
-## Risk & Portfolio Lab
+| Área | Recursos |
+|---|---|
+| Regressões | CAPM, FF3, FF5, Carhart4 e FF5 + momentum (FF6) |
+| Inferência | OLS, erros HAC/Newey–West, IC de 95%, p-valores e diagnósticos |
+| Multiativos | Amostra comum, heatmap de betas, benchmark e comparação de modelos |
+| Carteiras | Pesos personalizados, rebalanceamento mensal ou buy-and-hold |
+| Risco | Contribuições à variância considerando covariâncias e parcela residual |
+| Estresse | Choques manuais e reaplicação de fatores históricos |
+| Histórico | Análises salvas em SQLite, comparação e exclusão |
+| Diagnósticos avançados | VIF, correlação, Cook, leverage e sensibilidade HAC |
+| Otimização | Mínima variância regularizada, limites de peso/beta e holdout |
+| Avaliação | Betas móveis, walk-forward explicativo e previsão com fatores defasados |
+| Exportação | CSV, HTML autônomo, PDF nativo e ZIP consolidado |
+| Rastreabilidade | Manifesto de parâmetros/versões, snapshots SHA-256 e atualização de fatores |
 
-A página Pesquisa agora inclui, nesta ordem: decomposição de risco com covariâncias, cenários de estresse, análises salvas em SQLite, diagnósticos avançados e otimização com restrições e holdout. **[Guia e limitações](docs/portfolio-lab.md)**. Yahoo Finance é a seleção padrão; demonstração sintética é opt-in.
+**Mercados:** EUA/USD com Kenneth French; Brasil/BRL com NEFIN na página Pesquisa. O dataset brasileiro implementado oferece CAPM, FF3 e Carhart4, não FF5/FF6.
 
-## Instalação (Windows / PowerShell)
+## Fluxo da arquitetura
 
-Requer Python 3.11 ou superior (validado localmente no Python 3.13).
+```mermaid
+flowchart TD
+    User[Usuário] --> Web[Streamlit: dashboard e Pesquisa]
+    User --> CLI[CLI: análise individual]
+
+    subgraph Sources[Fontes de dados]
+        Yahoo[Yahoo Finance: preços ajustados]
+        French[Kenneth French: fatores EUA]
+        Nefin[NEFIN: fatores Brasil]
+        CSV[CSV do usuário / demonstração explícita]
+    end
+
+    Web --> Data[data.py / providers.py]
+    CLI --> Data
+    Yahoo --> Data
+    French --> Data
+    Nefin --> Data
+    CSV --> Data
+    Data --> Validation[Calendários NYSE/BMF, retornos mensais e validação]
+    Validation --> Sample[Amostra comum entre ativos e modelos]
+    Data --> Provenance[provenance.py: hashes e manifesto]
+    Provenance --> Files[(Cache e snapshots locais)]
+
+    subgraph Analytics[Motor analítico Python]
+        Regression[regression.py: OLS / HAC / rolling]
+        Research[research.py: comparação e carteira]
+        Risk[risk.py: risco e estresse]
+        Diagnostics[diagnostics.py: influência / VIF / HAC]
+        Forecast[forecast.py: previsão defasada]
+        Optimization[optimization.py: treino e holdout]
+    end
+
+    Sample --> Regression
+    Regression --> Research
+    Research --> Risk
+    Research --> Diagnostics
+    Sample --> Forecast
+    Sample --> Optimization
+    Research --> Store[storage.py]
+    Store --> DB[(SQLite local)]
+    Research --> Reports[report.py: CSV / HTML / PDF / ZIP]
+    Risk --> Reports
+    Diagnostics --> Reports
+    Forecast --> Reports
+    Optimization --> Weights[CSV de pesos e avaliação]
+    Reports --> User
+```
+
+**Arquitetura:** monólito modular. Streamlit e CLI chamam o mesmo núcleo Python; não há API REST própria ou frontend separado. A UI principal está em `app.py`; `pages/2_Pesquisa.py` orquestra a análise multivariada e `research_ui.py` apresenta o Risk & Portfolio Lab. Otimização tem downloads próprios; as ferramentas selecionadas adicionam tabelas aos extras do ZIP.
+
+## Instalação rápida
+
+### Windows / PowerShell
 
 ```powershell
+git clone https://github.com/Guiandrelino/fama-french-factor-regression.git
+cd fama-french-factor-regression
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-Não é necessário ativar o ambiente. Se preferir: ` .\.venv\Scripts\Activate.ps1`.
-No Linux/macOS, use `python3 -m venv .venv` e `.venv/bin/python` nos comandos.
+Abra **http://localhost:8501**. Não é necessário ativar a venv; para encerrar, use `Ctrl+C`.
 
-Para reproduzir as versões da validação local em Python 3.13:
+### Linux / macOS
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
-.\.venv\Scripts\python.exe -m pip install -e . --no-deps
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m streamlit run app.py
 ```
 
-O lock representa este ambiente Windows; a instalação pelo `pyproject.toml` é a alternativa multiplataforma. NumPy está limitado a `<2.4` por compatibilidade com pandas 2.x; warnings são tratados como erros nos testes. Streamlit usa a API atual `width="stretch"`.
+Python >=3.11; CI configurado para 3.11/3.12/3.13. `pyproject.toml` define dependências; `requirements-lock.txt` registra um ambiente Windows e não é lock universal.
 
-## Dashboard
+## Como utilizar
 
-1. Selecione **Demonstração offline**, **Yahoo Finance** ou **CSV próprio**.
-2. Escolha CAPM, FF3 ou FF5, intervalo, defasagens HAC e janela móvel.
-3. Clique em **Executar análise**.
-4. Examine coeficientes, IC de 95%, resíduos e exposições móveis.
-5. Na aba **Dados e exportação**, baixe coeficientes, observações e betas móveis.
+### Regressão individual
 
-A demonstração é sintética, reproduzível (seed 42, 2010–2024) e ignora o intervalo selecionado. Nunca substitui silenciosamente um download que falhou. Alterar controles não recalcula resultados até clicar no botão; uma nova execução que falha remove os resultados anteriores.
+Na página inicial, escolha demonstração, Yahoo ou CSV, selecione o modelo e execute. Examine coeficientes, intervalos, resíduos e betas móveis.
 
-### CSV de retornos
+### Pesquisa e carteira
 
-Use vírgula como separador, ponto decimal e uma observação por mês:
+1. Abra **Pesquisa** pela navegação lateral ou pelo link na página inicial.
+2. Escolha mercado, fonte (Yahoo é o padrão), ativos, benchmark e modelos.
+3. Informe pesos opcionais e política da carteira.
+4. Execute e explore as comparações, avaliações e relatórios.
+5. No **Risk & Portfolio Lab**, siga: **risco → estresse → análises salvas → diagnósticos → otimização**.
+
+Exemplo de pesos:
+
+```text
+AAPL: 30%
+MSFT: 30%
+SPY: 40%
+```
+
+Pesos devem somar 100%, sem alavancagem. `monthly` rebalanceia mensalmente; `buy_hold` deixa os pesos variarem. Brasil exige mudar ativos, benchmark e pesos para o universo BRL (por exemplo, `BOVA11.SA`) e selecionar NEFIN.
+
+Alterações nos controles exigem nova execução. A demonstração é sintética e ignora o intervalo de datas. Uma falha de download não ativa demonstração nem cache antigo silenciosamente.
+
+### Formato CSV
+
+Individual:
 
 ```csv
 date,return
@@ -54,69 +137,109 @@ date,return
 2020-02-29,-0.04
 ```
 
-`0.025` significa **2,5%**, não 0,025%. O arquivo deve conter **retornos totais simples mensais em USD**, incluindo dividendos, antes de subtrair RF. Não envie preços, retornos logarítmicos ou valores já excedentes. Datas são normalizadas para fim do mês; duplicatas mensais, datas ausentes, infinito e retornos inferiores a -100% são rejeitados. São necessários pelo menos **24 meses consecutivos em comum com os fatores**. O exemplo acima ilustra somente o formato, não tem observações suficientes para estimar o modelo.
+Pesquisa:
 
-O usuário é responsável por fornecer meses completos no CSV. A origem e a moeda não podem ser verificadas automaticamente.
-
-## CLI
-
-```powershell
-.\.venv\Scripts\factorlab.exe --demo --model FF5 --output outputs/demo
-.\.venv\Scripts\factorlab.exe --ticker AAPL --model FF3 --start 2015-01-01 --end 2025-01-01 --output outputs/aapl
-.\.venv\Scripts\factorlab.exe --csv meus_retornos.csv --model CAPM --output outputs/csv
+```csv
+date,AAPL,MSFT,SPY
+2020-01-31,0.025,0.03,0.01
+2020-02-29,-0.04,-0.02,-0.06
 ```
 
-Opções: `--hac-lags 3`, `--window 36`, `--refresh` (rebaixa fatores). `--end` no Yahoo é exclusivo. Os limites de seleção do CSV usam o fatiamento de datas do pandas (inclusivo). Na demonstração, datas não são aplicadas.
+Exemplos apenas de formato: a regressão exige **24 meses consecutivos em comum**. Informe retornos totais simples em decimal (`0.025 = 2,5%`), na moeda dos fatores, não preços ou retornos já excedentes. A Pesquisa exige as colunas dos ativos e do benchmark. A moeda e os dividendos do CSV são responsabilidade do usuário.
 
-Saídas: `coefficients.csv`, `observations.csv`, `rolling.csv` e `report.json`. O JSON contém fonte, modelo, intervalo efetivo, métricas e diagnósticos.
+### CLI
 
-## Metodologia
+```powershell
+.\.venv\Scripts\factorlab.exe --ticker SPY --model FF5 --start 2015-01-01 --end 2025-01-01 --output outputs/spy
+.\.venv\Scripts\factorlab.exe --demo --model CARHART4 --output outputs/demo
+.\.venv\Scripts\factorlab.exe --csv retornos.csv --model FF3 --output outputs/csv
+```
 
-Veja [docs/methodology.md](docs/methodology.md) para equações, construção da amostra, inferência e limitações.
+Opções: `--hac-lags`, `--window`, `--refresh` e `--output`. CLI individual com fatores americanos; saídas: coeficientes, observações e rolling CSV, além de `report.json`. Yahoo usa data final exclusiva; CSV individual usa fatiamento inclusivo do pandas. O CSV da Pesquisa usa limite final exclusivo.
 
-- **CAPM:** Mkt−RF.
-- **FF3:** Mkt−RF, SMB e HML, da família FF3.
-- **FF5:** Mkt−RF, SMB, HML, RMW e CMA, da família FF5.
-- OLS com intercepto, resposta `retorno do ativo − RF` e covariância HAC, inferência t.
-- Alpha anual exibido = `12 × alpha mensal` (não retorno composto).
-- Betas móveis calculados por OLS retrospectivo, sem previsão nem IC.
+## Metodologia em resumo
+
+`R_i − RF = alpha + Σ beta_k × fator_k + erro`
+
+- OLS com intercepto e inferência t usando covariância HAC/Newey–West.
+- FF3 e FF5 usam famílias de SMB diferentes; comparação não é estritamente aninhada.
+- Alpha anual = `12 × alpha mensal`, não retorno composto.
+- Risco inclui covariâncias: contribuição = `12 × beta_i × (Cov(F) beta)_i`.
+- Walk-forward explicativo usa fatores realizados e não é previsão negociável.
+- Previsão ex ante usa fatores defasados, mas não certifica disponibilidade histórica point-in-time.
+- Otimização separa treino e holdout; não considera custos, impostos nem garante rentabilidade.
+
+Detalhes: [metodologia](docs/methodology.md), [Pesquisa](docs/research.md) e [Risk & Portfolio Lab](docs/portfolio-lab.md).
+
+## Dados, armazenamento e privacidade
+
+- **Yahoo/yfinance:** preços ajustados; downloads sujeitos a DNS, limites e indisponibilidade.
+- **Kenneth French:** fatores americanos mensais, convertidos de percentual para decimal.
+- **NEFIN:** fatores brasileiros mensais value-weighted em decimal; respeite atribuição e termos do provedor.
+- **Calendários:** NYSE/BMF via `pandas-market-calendars`; mês corrente e fechamentos mensais incompletos são excluídos.
+- **`.cache/`:** downloads, metadados, snapshots e `analyses.sqlite`. Persistir em volume para manter dados no Docker.
+- **SQLite:** histórico local compartilhado entre sessões, sem autenticação. Não publique carteiras privadas sem controle de acesso.
+- **Exclusão:** remover uma análise do banco não remove os snapshots de origem.
+
+Cache de fatores não expira automaticamente. A Pesquisa permite atualizar e sinaliza arquivos registrados há sete dias ou mais. Atualizar dados exige reexecutar a análise. Não remova `.cache/` inteira apenas para atualizar fatores se quiser preservar o histórico SQLite.
 
 ## Testes e qualidade
 
 ```powershell
-# Testes determinísticos, sem internet
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest --cov=factorlab --cov-report=term-missing
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 
-# Integração real: SPY, AAPL, MSFT e IWM × CAPM, FF3 e FF5
-.\.venv\Scripts\python.exe -m pytest -q -m live
-
-# Upload real no Chromium: servidor isolado, dados sintéticos locais
+# Upload/download real no Chromium, com dados locais controlados
 .\.venv\Scripts\python.exe -m playwright install chromium
 .\.venv\Scripts\python.exe -m pytest -q -m browser
+
+# Fontes externas: EUA e Brasil
+.\.venv\Scripts\python.exe -m pytest -q -m live
 ```
 
-Testes `live` e `browser` não rodam por padrão. A suíte offline compara coeficientes, HAC, p-valores e intervalos com statsmodels, recupera parâmetros conhecidos e cobre falhas de dados, cache, rede simulada, CLI e dashboard. O teste Chromium envia CSV pelo widget real, executa a análise, baixa o arquivo de coeficientes e confirma a mensagem de erro após um upload inválido.
+Live e browser são separados da suíte padrão. Última entrega do Portfolio Lab: **72 testes offline e teste Chromium aprovados**; a tentativa live foi interrompida após falhas DNS, portanto não é declarada aprovada nessa entrega. [Histórico de validação](docs/validation.md).
 
-Detalhes e resultados: [docs/validation.md](docs/validation.md). Testes live dependem de disponibilidade, limites e revisões de dados das fontes externas; não são prova de acurácia econômica dos dados.
+GitHub Actions configura Python 3.11/3.12/3.13, lint/formato, cobertura, Chromium e smoke test Docker; live roda semanalmente ou por disparo manual. Aprovação de uma execução anterior não garante aprovação de commits posteriores.
 
-## Estrutura
+## Docker
+
+```bash
+docker build -t factorlab .
+docker run --rm -p 8501:8501 -v factorlab-cache:/app/.cache factorlab
+```
+
+Container com usuário não root e healthcheck. Não inclui autenticação ou HTTPS; para acesso externo, configure proxy e controles de segurança.
+
+## Estrutura do repositório
 
 ```text
-app.py                      Dashboard
-src/factorlab/data.py        Downloads, parser, retornos e CSV
-src/factorlab/regression.py  OLS, HAC, diagnósticos e rolling
-src/factorlab/cli.py         Execução e exportação por terminal
-tests/                      Unitários, integração, dashboard e navegador
-docs/                       Metodologia e validação
+.streamlit/config.toml       Tema e configuração Streamlit
+.github/workflows/quality.yml CI: testes, cobertura, navegador e Docker
+app.py                       Dashboard individual
+pages/2_Pesquisa.py           Workspace multiativos e carteira
+src/factorlab/
+  data.py / providers.py      Fontes, calendários e contratos dos dados
+  regression.py              Regressões e inferência
+  research.py / forecast.py  Comparações, carteiras e avaliações
+  risk.py / diagnostics.py   Risco, estresse e diagnósticos
+  optimization.py            Alocação com restrições e holdout
+  storage.py / provenance.py SQLite, snapshots e manifesto
+  report.py                  Relatórios e exportação
+  ui.py / research_ui.py      Identidade visual e ferramentas do terminal
+  cli.py                     Interface de linha de comando
+tests/                       Unitários, integração e navegador
+docs/                        Documentação técnica e funcional
+Dockerfile                   Imagem de execução
 ```
 
-## Fontes e limitações
+## Documentação
 
-- [Kenneth French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html): fatores americanos mensais; o ZIP é armazenado em `.cache/` e reutilizado até remoção ou `--refresh` na CLI. O dashboard também usa cache em memória de uma hora. Excluir `.cache/` e reiniciar o app força nova obtenção.
-- [yfinance](https://github.com/ranaroussi/yfinance): preços Yahoo com ajuste automático de dividendos/splits; não é uma fonte licenciada de nível institucional. Respeite os termos das fontes.
-- A página inicial e CLI usam fatores americanos/USD. Para Brasil/BRL, use a página Pesquisa com NEFIN; não há FF5 brasileiro neste dataset. Não há negociação, custos ou previsão de preços.
-- R² alto não significa rentabilidade futura, e alpha significativo não prova habilidade. Leia as limitações econométricas no documento de metodologia.
+- **[Guia completo do projeto](docs/PROJECT_GUIDE.md)**
+- [Metodologia econométrica](docs/methodology.md)
+- [Página Pesquisa e fontes](docs/research.md)
+- [Risk & Portfolio Lab](docs/portfolio-lab.md)
+- [Validação e histórico de execução](docs/validation.md)
 
-Projeto para análise e educação, **não recomendação de investimento**.
+**Uso educacional e analítico; não é recomendação de investimento.** R² elevado e alpha significativo não garantem retornos futuros. Dados públicos podem ser revisados; não há execução de ordens nem backtest investível point-in-time certificado.
