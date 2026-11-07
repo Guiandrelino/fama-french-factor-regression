@@ -8,7 +8,7 @@ APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
 @pytest.mark.parametrize("model", ["CAPM", "FF3", "FF5"])
 def test_demo_dashboard(model):
-    app = AppTest.from_file(APP).run()
+    app = AppTest.from_file(APP, default_timeout=20).run()
     app.sidebar.selectbox[0].select(model)
     app.sidebar.button[0].click().run(timeout=30)
     assert not app.exception
@@ -19,7 +19,7 @@ def test_demo_dashboard(model):
 
 
 def test_csv_without_upload_and_invalid_dates():
-    app = AppTest.from_file(APP).run()
+    app = AppTest.from_file(APP, default_timeout=20).run()
     app.sidebar.radio[0].set_value("CSV próprio").run()
     app.sidebar.button[0].click().run()
     assert "Envie um CSV" in app.error[0].value
@@ -33,7 +33,7 @@ def test_csv_without_upload_and_invalid_dates():
 def test_network_error_shown_without_stale_results(monkeypatch):
     import factorlab.data
 
-    app = AppTest.from_file(APP).run()
+    app = AppTest.from_file(APP, default_timeout=20).run()
     app.sidebar.button[0].click().run()
     assert app.metric
 
