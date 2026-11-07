@@ -1,13 +1,14 @@
 [theme]
 base = "dark"
-primaryColor = "#20E3A2"
-backgroundColor = "#070C14"
-secondaryBackgroundColor = "#101D30"
-textColor = "#F0F5FC"
+primaryColor = "#FFAB40"
+backgroundColor = "#090A0C"
+secondaryBackgroundColor = "#17191E"
+textColor = "#E5E7EB"
 font = "monospace"
 
 [server]
 headless = true
+maxUploadSize = 10
 
 [browser]
 gatherUsageStats = false
