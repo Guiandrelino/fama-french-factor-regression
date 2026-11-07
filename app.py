@@ -9,12 +9,12 @@ import streamlit as st
 
 from factorlab.data import demo_data, load_factors, load_prices, monthly_returns, read_returns_csv
 from factorlab.regression import MODELS, fit_model
-from factorlab.ui import context_strip, setup_terminal, welcome_cards
+from factorlab.ui import context_strip, setup_terminal
 
 st.set_page_config(page_title="FactorLab | Research Terminal", page_icon="▥", layout="wide")
 setup_terminal("Factor regression")
-st.title("Fama–French Research Terminal")
-st.caption("Exposição a fatores, alpha e diagnóstico econométrico · frequência mensal · USD")
+st.title("FATOR / Estação de análise")
+st.caption("REGRESSÃO DE RETORNOS EXCEDENTES   •   MENSAL   •   USD   •   OLS / HAC")
 st.page_link(
     "pages/2_Pesquisa.py",
     label="Abrir Pesquisa: múltiplos ativos, carteira e relatórios",
@@ -93,18 +93,66 @@ if "analysis" not in st.session_state:
             ("INFERÊNCIA", "OLS + Newey–West"),
         ]
     )
-    welcome_cards()
-    st.info("Escolha uma fonte e clique em Executar análise. A demonstração funciona sem internet.")
-    st.markdown("""
-### O que este projeto responde?
-- O retorno é explicado pelo mercado ou por exposições a tamanho, valor, rentabilidade e investimento?
-- O alpha é estatisticamente diferente de zero, após controlar pelos fatores?
-- As exposições mudam ao longo do tempo?
-
-**Modelo:** `Rᵢ − Rf = α + βₘ(Mkt−Rf) + βₛSMB + βₕHML + βᵣRMW + β꜀CMA + ε`
-
-CAPM usa apenas mercado; FF3 adiciona SMB e HML; FF5 inclui RMW e CMA.
-""")
+    st.markdown(
+        '<div class="desk-command"><span>FATOR &lt;GO&gt;</span> CONFIGURE O UNIVERSO → EXECUTE → INSPECIONE O RISCO</div>',
+        unsafe_allow_html=True,
+    )
+    left, right = st.columns([1.65, 1], gap="small")
+    with left:
+        st.markdown(
+            '<div class="panel-title">01 / MATRIZ DE MODELOS <span>ESPECIFICAÇÕES DISPONÍVEIS</span></div>',
+            unsafe_allow_html=True,
+        )
+        matrix = pd.DataFrame(
+            {
+                name: {
+                    factor: ("●" if factor in columns else "—")
+                    for factor in ["Mkt-RF", "SMB", "HML", "RMW", "CMA", "Mom"]
+                }
+                for name, columns in MODELS.items()
+            }
+        ).T
+        matrix.index.name = "Modelo"
+        st.dataframe(matrix, width="stretch", height=245)
+        st.markdown('<div class="panel-title">02 / EQUAÇÃO DO MODELO</div>', unsafe_allow_html=True)
+        st.code("Ri − RF = α + β × F + ε", language=None)
+        st.caption(
+            "Alpha mensal em decimal · betas adimensionais · intervalos de 95% com covariância HAC."
+        )
+    with right:
+        st.markdown(
+            '<div class="panel-title">03 / TICKET DE PESQUISA <span>NÃO EXECUTADO</span></div>',
+            unsafe_allow_html=True,
+        )
+        ticket = pd.DataFrame(
+            {
+                "Parâmetro": [
+                    "Fonte",
+                    "Ativo solicitado",
+                    "Modelo",
+                    "Início",
+                    "Fim",
+                    "HAC / lags",
+                    "Janela móvel",
+                ],
+                "Configuração": [
+                    source,
+                    ticker,
+                    model,
+                    str(start),
+                    str(end),
+                    str(lags),
+                    f"{window} meses",
+                ],
+            }
+        )
+        st.dataframe(ticket, hide_index=True, width="stretch", height=280)
+        st.warning("SEM RESULTADOS · configure os controles à esquerda e execute a análise.")
+    st.markdown('<div class="panel-title">04 / PROTOCOLO DE LEITURA</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="desk-protocol"><div><b>01 ORIGEM</b><br>Dados reais exigem rede. Demonstração é identificada como sintética.</div><div><b>02 INFERÊNCIA</b><br>IC do alpha incluindo zero não sustenta alpha diferente de zero.</div><div><b>03 RISCO</b><br>Inspecione resíduos e estabilidade. Ajuste histórico não é previsão.</div></div>',
+        unsafe_allow_html=True,
+    )
 else:
     result, label, input_count, used_window = st.session_state["analysis"]
     st.subheader(f"{result.model} · {label}")
