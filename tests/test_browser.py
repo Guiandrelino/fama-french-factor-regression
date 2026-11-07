@@ -108,8 +108,16 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                 assert page.get_by_text("Alpha mensal", exact=True).count() == 0
                 page.goto(url + "/Pesquisa")
                 page.get_by_text("CSV de retornos", exact=True).click()
-                page.locator('input[type="file"]').set_input_files(str(panel_csv))
-                page.get_by_text("panel.csv", exact=True).wait_for()
+                page.locator('[data-testid="stStatusWidget"]').wait_for(state="hidden")
+                for attempt in range(3):
+                    page.locator('input[type="file"]').set_input_files(str(panel_csv))
+                    try:
+                        page.get_by_text("panel.csv", exact=True).wait_for(timeout=10000)
+                        break
+                    except PlaywrightTimeoutError:
+                        if attempt == 2:
+                            raise
+                page.locator('[data-testid="stStatusWidget"]').wait_for(state="hidden")
                 page.get_by_role("button", name="Executar pesquisa", exact=True).click()
                 page.get_by_role("tab", name="Relatório e exportação").wait_for(timeout=60000)
                 page.get_by_role("tab", name="Relatório e exportação").click()
