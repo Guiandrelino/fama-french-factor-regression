@@ -22,12 +22,10 @@ st.page_link(
 )
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def market_data(ticker, start, end, model):
     return monthly_returns(load_prices(ticker, str(start), str(end))), load_factors(model)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def french_data(model):
     return load_factors(model)
 

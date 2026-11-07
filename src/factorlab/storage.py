@@ -21,16 +21,29 @@ class AnalysisStore:
 
     @contextmanager
     def connect(self):
-        conn = sqlite3.connect(self.path, timeout=15)
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+        from factorlab.runtime import path_lock
 
-    def save(self, name, study, metadata):
+        with path_lock(self.path):
+            conn = sqlite3.connect(self.path, timeout=15)
+            try:
+                with conn:
+                    yield conn
+            finally:
+                conn.close()
+
+    def save(self, name, study, metadata, extras=None):
         if not name.strip() or len(name) > 120:
             raise ValueError("Nome obrigatório, até 120 caracteres.")
+        from factorlab.runtime import enforce_quota
+
+        payload = {
+            key: frame.to_json(orient="table", date_format="iso")
+            for key, frame in (extras or {}).items()
+        }
+        enforce_quota(
+            self.path.parent,
+            len(json.dumps(payload).encode()) + len(study.returns.to_csv().encode()),
+        )
         with self.connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO analyses(name,created_at,metadata,summary,returns_csv) VALUES(?,?,?,?,?)",
@@ -42,7 +55,12 @@ class AnalysisStore:
                     study.returns.to_csv(),
                 ),
             )
-            return cursor.lastrowid
+            identifier = cursor.lastrowid
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS artifacts (analysis_id INTEGER PRIMARY KEY, payload TEXT NOT NULL)"
+            )
+            conn.execute("INSERT INTO artifacts VALUES (?,?)", (identifier, json.dumps(payload)))
+            return identifier
 
     def list(self):
         with self.connect() as conn:
@@ -58,7 +76,22 @@ class AnalysisStore:
             ).fetchone()
         if row is None:
             raise ValueError("Análise não encontrada.")
+        with self.connect() as conn:
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='artifacts'"
+            ).fetchone()
+            artifact = (
+                conn.execute(
+                    "SELECT payload FROM artifacts WHERE analysis_id=?", (int(analysis_id),)
+                ).fetchone()
+                if exists
+                else None
+            )
         return {
+            "extras": {
+                key: pd.read_json(io.StringIO(value), orient="table")
+                for key, value in json.loads(artifact[0] if artifact else "{}").items()
+            },
             "name": row[0],
             "metadata": json.loads(row[1]),
             "summary": pd.read_json(io.StringIO(row[2]), orient="table"),
@@ -68,6 +101,8 @@ class AnalysisStore:
     def delete(self, analysis_id):
         with self.connect() as conn:
             conn.execute("DELETE FROM analyses WHERE id=?", (int(analysis_id),))
+            if conn.execute("SELECT name FROM sqlite_master WHERE name='artifacts'").fetchone():
+                conn.execute("DELETE FROM artifacts WHERE analysis_id=?", (int(analysis_id),))
 
 
 def compare_saved(first, second):

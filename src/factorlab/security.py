@@ -34,8 +34,9 @@ def user_root(user):
 
 
 def workspace_root():
-    # Fora de uma sessão autenticada, usa somente o workspace local.
-    return user_root(st.session_state.get("authenticated_user", "local"))
+    from factorlab.runtime import workspace_root as current_root
+
+    return current_root()
 
 
 def require_login():
@@ -50,6 +51,14 @@ def require_login():
     users = json.loads(encoded)
     import time
 
+    now = time.time()
+    ttl = int(os.getenv("FACTORLAB_SESSION_SECONDS", "1800"))
+    if (
+        st.session_state.get("authenticated_user")
+        and now - st.session_state.get("authenticated_at", 0) > ttl
+    ):
+        st.session_state.clear()
+        st.warning("Sessão expirada; entre novamente.")
     attempts = st.session_state.get("login_attempts", 0)
     if attempts >= 5 and time.time() - st.session_state.get("last_login_attempt", 0) < 60:
         st.error("Muitas tentativas nesta sessão. Aguarde um minuto.")
@@ -63,6 +72,7 @@ def require_login():
             if verify_password(password, users.get(user, "invalid")):
                 st.session_state.clear()
                 st.session_state["authenticated_user"] = user
+                st.session_state["authenticated_at"] = time.time()
                 st.rerun()
             st.session_state["login_attempts"] = attempts + 1
             st.session_state["last_login_attempt"] = time.time()
@@ -74,6 +84,13 @@ def require_login():
 
 
 def backup_database(path):
+    from factorlab.runtime import path_lock
+
+    with path_lock(path):
+        return _backup_database(path)
+
+
+def _backup_database(path):
     source = sqlite3.connect(path)
     destination = Path(path).with_suffix(".backup.sqlite")
     try:
@@ -85,14 +102,32 @@ def backup_database(path):
 
 
 def restore_database(path, content):
+    from factorlab.runtime import path_lock
+
+    with path_lock(path):
+        _restore_database(path, content)
+
+
+def _restore_database(path, content):
     if not content.startswith(b"SQLite format 3\x00") or len(content) > 25_000_000:
         raise ValueError("Backup SQLite inválido ou maior que 25 MB.")
-    temporary = Path(path).with_suffix(".restore.sqlite")
+    import tempfile
+
+    fd, name = tempfile.mkstemp(dir=Path(path).parent, suffix=".restore.sqlite")
+    os.close(fd)
+    temporary = Path(name)
     temporary.write_bytes(content)
     try:
         with closing(sqlite3.connect(temporary)) as conn:
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Backup corrompido.")
+            objects = conn.execute(
+                "SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            if any(
+                kind != "table" or name not in {"analyses", "artifacts"} for kind, name in objects
+            ):
+                raise ValueError("Backup contém objetos não autorizados.")
             required = {"id", "name", "created_at", "metadata", "summary", "returns_csv"}
             if not required.issubset({r[1] for r in conn.execute("PRAGMA table_info(analyses)")}):
                 raise ValueError("Esquema de backup incompatível.")

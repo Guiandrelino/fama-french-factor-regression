@@ -19,8 +19,12 @@ def snapshot(content: bytes, source: str, root: str | Path = ".cache") -> dict:
     digest = hashlib.sha256(content).hexdigest()
     path = Path(root) / "snapshots" / digest
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_bytes(content)
+    from factorlab.runtime import atomic_write, enforce_quota, path_lock
+
+    with path_lock(Path(root) / "quota"):
+        if not path.exists():
+            enforce_quota(root, len(content))
+            atomic_write(path, content)
     return {
         "source": source,
         "sha256": digest,
