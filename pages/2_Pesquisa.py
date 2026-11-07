@@ -26,7 +26,14 @@ from factorlab.research import (
 from factorlab.research_ui import render_research_tools
 from factorlab.security import workspace_root
 from factorlab.ui import context_strip, setup_terminal, welcome_cards
-from ui.components import footer, format_chart, percent, styled_table
+from ui.components import (
+    footer,
+    format_chart,
+    percent,
+    sidebar_header,
+    sidebar_section,
+    styled_table,
+)
 from ui.theme import DIVERGING
 
 st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="F", layout="wide")
@@ -35,8 +42,8 @@ st.title("Pesquisa de carteiras")
 st.caption("Amostra mensal comum para todos os ativos e modelos selecionados.")
 
 with st.sidebar:
-    st.markdown("### Universo e alocação")
-    st.caption("UNIVERSO / ALOCAÇÃO / MODELOS")
+    sidebar_header("Pesquisa de carteiras", "Universo, alocação e modelos")
+    sidebar_section("01", "Mercado e dados")
     market = st.selectbox("Mercado / moeda", ["EUA / USD", "Brasil / BRL"])
     source = st.radio("Dados", ["Demonstração", "Yahoo Finance", "CSV de retornos"], index=1)
     tickers_text = st.text_input("Ativos separados por vírgula", "AAPL, MSFT, SPY, IWM")
@@ -46,9 +53,11 @@ with st.sidebar:
         BR_MODELS if market.startswith("Brasil") else ["CAPM", "FF3", "FF5", "CARHART4", "FF6"],
         default=["CAPM", "FF3"],
     )
+    sidebar_section("02", "Período e arquivo")
     start = st.date_input("Início", date(2015, 1, 1), min_value=date(1926, 1, 1))
     end = st.date_input("Fim exclusivo", date.today(), min_value=date(1926, 1, 1))
     uploaded = st.file_uploader("CSV: date,AAPL,MSFT,SPY,... · decimais", type="csv")
+    sidebar_section("03", "Construção da carteira")
     weights_text = st.text_area(
         "Carteira opcional · um ativo:peso por linha", "AAPL: 30%\nMSFT: 30%\nSPY: 40%"
     )
@@ -60,13 +69,16 @@ with st.sidebar:
             "buy_hold": "Buy-and-hold · pesos variáveis",
         }[v],
     )
+    sidebar_section("04", "Parâmetros de pesquisa")
     lags = st.slider("Defasagens HAC", 0, 12, 3)
     window = st.slider("Janela de estabilidade / treino", 24, 120, 60, step=12)
     forecast_lag = st.slider("Defasagem dos fatores para previsão (meses)", 1, 6, 2)
     refresh = st.checkbox("Atualizar fatores ao executar", value=False)
-    audit_only = st.button("Inspecionar dados antes da regressão")
+    st.divider()
+    sidebar_section("05", "Validação e execução")
+    audit_only = st.button("Inspecionar dados antes da regressão", width="stretch")
     quality_confirmed = st.checkbox("Confirmo revisar a qualidade dos dados", value=False)
-    run = st.button("Executar pesquisa", type="primary")
+    run = st.button("Executar pesquisa", type="primary", width="stretch")
 
 if st.button("Atualizar fatores agora"):
     try:

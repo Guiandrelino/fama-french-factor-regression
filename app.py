@@ -10,7 +10,16 @@ import streamlit as st
 from factorlab.data import demo_data, load_factors, load_prices, monthly_returns, read_returns_csv
 from factorlab.regression import MODELS, fit_model
 from factorlab.ui import context_strip, setup_terminal
-from ui.components import footer, format_chart, note, percent, section_header, styled_table
+from ui.components import (
+    footer,
+    format_chart,
+    note,
+    percent,
+    section_header,
+    sidebar_header,
+    sidebar_section,
+    styled_table,
+)
 
 st.set_page_config(page_title="FactorLab | Research Terminal", page_icon="F", layout="wide")
 setup_terminal("Pesquisa de fatores / Regressão individual")
@@ -31,11 +40,12 @@ def french_data(model):
 
 
 with st.sidebar:
-    st.markdown("### Universo e parâmetros")
-    st.caption("PARÂMETROS DA REGRESSÃO")
+    sidebar_header("Regressão individual", "Exposições e inferência estatística")
+    sidebar_section("01", "Fonte e universo")
     source = st.radio("Fonte", ["Demonstração offline", "Yahoo Finance", "CSV próprio"])
     model = st.selectbox("Modelo", list(MODELS), index=2)
     ticker = st.text_input("Ticker americano", "SPY").strip().upper()
+    sidebar_section("02", "Período da amostra")
     start = st.date_input(
         "Início",
         date(2015, 1, 1),
@@ -55,8 +65,10 @@ with st.sidebar:
         if source == "CSV próprio"
         else None
     )
+    sidebar_section("03", "Estimação e estabilidade")
     lags = st.slider("Defasagens HAC / Newey–West", 0, 12, 3)
     window = st.slider("Janela móvel (meses)", 24, 120, 36, step=12)
+    st.divider()
     run = st.button("Executar análise", type="primary", width="stretch")
     st.caption("Dados reais exigem internet. A demonstração não faz downloads.")
 

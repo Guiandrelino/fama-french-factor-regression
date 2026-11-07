@@ -21,6 +21,20 @@ def percent(value, decimals=2):
     return br_number(value * 100, decimals) + "%"
 
 
+def sidebar_header(title, subtitle):
+    st.markdown(
+        f'<div class="sidebar-identity"><span class="sidebar-monogram">F</span><div><b>FactorLab</b><small>Plataforma de pesquisa</small></div></div><div class="sidebar-context"><strong>{escape(title)}</strong><span>{escape(subtitle)}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def sidebar_section(number, title):
+    st.markdown(
+        f'<div class="sidebar-section"><span>{escape(number)}</span>{escape(title)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def top_bar(context):
     now = datetime.now(UTC).strftime("%d/%m/%Y · %H:%M UTC")
     st.markdown(

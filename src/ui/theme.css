@@ -4,6 +4,17 @@
 [data-testid="stHeader"]{background:var(--base);height:32px;border:0}
 [data-testid="stToolbar"],#MainMenu,[data-testid="stDecoration"],footer:not(.platform-footer){display:none!important}
 [data-testid="stSidebar"]{background:var(--panel);border-right:1px solid var(--border)}
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]{padding:20px 22px 28px}
+[data-testid="stSidebarNav"]{padding-top:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+[data-testid="stSidebar"] hr{margin:12px 0;border-color:var(--border)}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{font-size:11px;line-height:1.6}
+[data-testid="stSidebar"] [data-baseweb="input"],[data-testid="stSidebar"] [data-baseweb="select"]{background:var(--base);border-color:var(--border)}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"]{padding:8px 10px;background:var(--base);border:1px solid var(--border);border-radius:3px;gap:4px}
+.sidebar-identity{display:flex;align-items:center;gap:12px;margin:0 0 22px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.sidebar-monogram{display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:var(--raised);border:1px solid var(--border);color:var(--accent);font:500 18px 'IBM Plex Mono',monospace}
+.sidebar-identity b{display:block;font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--primary)}.sidebar-identity small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.sidebar-context{margin-bottom:4px}.sidebar-context strong{display:block;font-size:14px;font-weight:500;color:var(--primary)}.sidebar-context>span{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.sidebar-section{display:flex;align-items:center;gap:9px;margin-top:18px;margin-bottom:4px;color:var(--secondary);font:500 11px 'IBM Plex Sans',Arial,sans-serif;letter-spacing:.035em}.sidebar-section>span{color:var(--accent);font:10px 'IBM Plex Mono',monospace;background:var(--raised);padding:3px 5px;border:1px solid var(--border)}
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:12px}
 [data-testid="stSidebarNav"] a{border-radius:3px;font-size:12px}
 [data-testid="stSidebarNav"] a[aria-current="page"]{background:var(--hover);border-left:2px solid var(--accent)}
