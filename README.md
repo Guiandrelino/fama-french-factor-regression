@@ -8,6 +8,10 @@ Comparação de ativos e benchmark, carteira com rebalanceamento mensal ou buy-a
 
 **[Guia completo da página Pesquisa](docs/research.md)**. Abra pelo link na página inicial ou navegação lateral. Inclui instruções de CI e Docker, metodologia da carteira, calendários NYSE/BMF e termos de uso da fonte brasileira. PDF nativo disponível por ReportLab, além do HTML e ZIP. Previsão ex ante com fatores defasados é separada da avaliação explicativa.
 
+## Risk & Portfolio Lab
+
+A página Pesquisa agora inclui, nesta ordem: decomposição de risco com covariâncias, cenários de estresse, análises salvas em SQLite, diagnósticos avançados e otimização com restrições e holdout. **[Guia e limitações](docs/portfolio-lab.md)**. Yahoo Finance é a seleção padrão; demonstração sintética é opt-in.
+
 ## Instalação (Windows / PowerShell)
 
 Requer Python 3.11 ou superior (validado localmente no Python 3.13).
