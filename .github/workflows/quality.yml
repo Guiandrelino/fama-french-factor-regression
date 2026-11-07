@@ -1,0 +1,67 @@
+name: Quality
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 10 * * 1'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python }}'
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest --cov=factorlab --cov-report=term-missing --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python }}
+          path: coverage.xml
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -e '.[dev]'
+      - run: playwright install --with-deps chromium
+      - run: pytest -m browser -q
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t factorlab:ci .
+      - run: |
+          docker run -d --name factorlab-ci -p 8501:8501 factorlab:ci
+          for i in $(seq 1 40); do
+            if curl --fail http://localhost:8501/_stcore/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs factorlab-ci
+          exit 1
+      - run: >-
+          docker exec factorlab-ci python -c
+          "from factorlab.data import demo_data; from factorlab.research import compare;
+          from factorlab.report import pdf_report; r,f=demo_data();
+          s=compare(r.to_frame('SPY'), {'FF3':f}, 'SPY');
+          assert pdf_report(s,{}).startswith(b'%PDF-')"
+      - if: always()
+        run: docker rm -f factorlab-ci || true
+  live:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -e '.[dev]'
+      - run: pytest -m live -q
