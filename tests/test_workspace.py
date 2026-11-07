@@ -13,7 +13,7 @@ def test_workspace_demo(policy):
     ).run()
     app.sidebar.radio[0].set_value("Demonstração").run()
     app.sidebar.selectbox[1].set_value(policy)
-    app.sidebar.button[0].click().run()
+    app.sidebar.button[1].click().run()
     assert not app.exception
     assert not app.error
     study, metadata, extras, oos = app.session_state["study"]

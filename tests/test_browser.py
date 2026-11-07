@@ -7,6 +7,7 @@ import subprocess
 import time
 import urllib.request
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,20 @@ from factorlab.data import demo_data
 
 pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@contextmanager
+def browser_evidence(playwright, artifacts):
+    browser = playwright.chromium.launch()
+    context = browser.new_context(accept_downloads=True)
+    context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    page = context.new_page()
+    try:
+        yield page
+    finally:
+        page.screenshot(path=str(artifacts / "final-state.png"), full_page=True)
+        context.tracing.stop(path=str(artifacts / "trace.zip"))
+        browser.close()
 
 
 def test_csv_upload_and_download_in_browser(tmp_path):
@@ -45,7 +60,9 @@ def test_csv_upload_and_download_in_browser(tmp_path):
     import sys
 
     env = {**os.environ, "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false"}
-    with (tmp_path / "server.log").open("w") as log:
+    artifacts = ROOT / "test-results"
+    artifacts.mkdir(exist_ok=True)
+    with (artifacts / "server.log").open("w") as log:
         server = subprocess.Popen(
             [
                 sys.executable,
@@ -72,9 +89,13 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                     time.sleep(0.2)
             else:
                 pytest.fail("Dashboard não iniciou")
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page(accept_downloads=True)
+            with sync_playwright() as p, browser_evidence(p, artifacts) as page:
+
+                def record_console(msg):
+                    with (artifacts / "console.log").open("a", encoding="utf-8") as output:
+                        output.write(msg.text + "\n")
+
+                page.on("console", record_console)
                 page.goto(url)
                 page.get_by_text("CSV próprio", exact=True).click()
                 page.locator('input[type="file"]').set_input_files(str(csv))
@@ -118,6 +139,7 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                         if attempt == 2:
                             raise
                 page.locator('[data-testid="stStatusWidget"]').wait_for(state="hidden")
+                page.get_by_text("Confirmo revisar a qualidade dos dados", exact=True).click()
                 page.get_by_role("button", name="Executar pesquisa", exact=True).click()
                 page.get_by_role("tab", name="Relatório e exportação").wait_for(timeout=60000)
                 page.get_by_role("tab", name="Relatório e exportação").click()
@@ -128,7 +150,7 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                 with zipfile.ZipFile(bundle_path) as archive:
                     assert "report.html" in archive.namelist()
                     assert "Carteira" in archive.read("summary.csv").decode()
-                browser.close()
+
         finally:
             server.terminate()
             server.wait(timeout=20)
