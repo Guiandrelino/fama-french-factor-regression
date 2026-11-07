@@ -21,6 +21,7 @@ from factorlab.research import (
     validate_panel,
     walk_forward,
 )
+from factorlab.research_ui import render_research_tools
 from factorlab.ui import context_strip, setup_terminal, welcome_cards
 
 st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="▥", layout="wide")
@@ -32,7 +33,7 @@ with st.sidebar:
     st.markdown("### ▥ Portfolio controls")
     st.caption("UNIVERSO / ALOCAÇÃO / MODELOS")
     market = st.selectbox("Mercado / moeda", ["EUA / USD", "Brasil / BRL"])
-    source = st.radio("Dados", ["Demonstração", "Yahoo Finance", "CSV de retornos"])
+    source = st.radio("Dados", ["Demonstração", "Yahoo Finance", "CSV de retornos"], index=1)
     tickers_text = st.text_input("Ativos separados por vírgula", "AAPL, MSFT, SPY, IWM")
     benchmark = st.text_input("Benchmark", "SPY").strip().upper()
     models = st.multiselect(
@@ -318,6 +319,8 @@ if "study" in st.session_state:
             st.dataframe(predicted, width="stretch")
         else:
             st.info("Amostra insuficiente para previsão defasada.")
+    st.subheader("Risk & Portfolio Lab")
+    render_research_tools(study, metadata, extras)
     with tabs[4]:
         st.download_button(
             "Baixar relatório PDF", pdf_report(study, metadata), "report.pdf", "application/pdf"

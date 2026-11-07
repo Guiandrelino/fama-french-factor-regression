@@ -11,6 +11,7 @@ def test_workspace_demo(policy):
     app = AppTest.from_file(
         str(Path(__file__).parents[1] / "pages/2_Pesquisa.py"), default_timeout=40
     ).run()
+    app.sidebar.radio[0].set_value("Demonstração").run()
     app.sidebar.selectbox[1].set_value(policy)
     app.sidebar.button[0].click().run()
     assert not app.exception
