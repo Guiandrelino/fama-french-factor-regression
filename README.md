@@ -1,6 +1,8 @@
 # FactorLab · Financial Research Terminal
 
-Terminal de pesquisa quantitativa para **regressões de fatores, comparação de ativos, análise de carteiras, decomposição de risco e otimização com restrições**. Construído em Python e Streamlit, com identidade visual azul-marinho, preto, branco e verde.
+Terminal de pesquisa quantitativa para **regressões de fatores, comparação de ativos, análise de carteiras, decomposição de risco e otimização com restrições**. Construído em Python e Streamlit, com nova interface profissional grafite/preto, âmbar e painéis compactos inspirados em terminais financeiros (sem vínculo com Bloomberg).
+
+**[Novo Terminal Workspace: guia de operação e segurança](docs/TERMINAL_OPERATIONS.md)** — central de qualidade pré-regressão, avaliação rolling com custos/grupos, relatório integrado, bootstrap em blocos, alertas, autenticação por ambiente, isolamento de workspace, backup/restauração e retenção explícita. Leia os limites de publicação antes de expor o servidor.
 
 Usa dados reais de **Yahoo Finance**, **Kenneth French** e **NEFIN**, além de CSV próprio e demonstração sintética explicitamente identificada. Não é uma plataforma de cotações em tempo real nem de execução de ordens.
 
@@ -178,7 +180,7 @@ Detalhes: [metodologia](docs/methodology.md), [Pesquisa](docs/research.md) e [Ri
 - **NEFIN:** fatores brasileiros mensais value-weighted em decimal; respeite atribuição e termos do provedor.
 - **Calendários:** NYSE/BMF via `pandas-market-calendars`; mês corrente e fechamentos mensais incompletos são excluídos.
 - **`.cache/`:** downloads, metadados, snapshots e `analyses.sqlite`. Persistir em volume para manter dados no Docker.
-- **SQLite:** histórico local compartilhado entre sessões, sem autenticação. Não publique carteiras privadas sem controle de acesso.
+- **SQLite:** histórico por workspace; local sem login por padrão. Login por hashes e diretórios por usuário pode ser habilitado pelo ambiente. Publicação ainda exige HTTPS/rate limiting e revisão de segurança.
 - **Exclusão:** remover uma análise do banco não remove os snapshots de origem.
 
 Cache de fatores não expira automaticamente. A Pesquisa permite atualizar e sinaliza arquivos registrados há sete dias ou mais. Atualizar dados exige reexecutar a análise. Não remova `.cache/` inteira apenas para atualizar fatores se quiser preservar o histórico SQLite.
@@ -210,7 +212,7 @@ docker build -t factorlab .
 docker run --rm -p 8501:8501 -v factorlab-cache:/app/.cache factorlab
 ```
 
-Container com usuário não root e healthcheck. Não inclui autenticação ou HTTPS; para acesso externo, configure proxy e controles de segurança.
+Container com usuário não root e healthcheck. Login é configurável por ambiente, HTTPS/proxy não são fornecidos; para acesso externo leia o guia de segurança. Persistir o volume `.cache` preserva workspaces.
 
 ## Estrutura do repositório
 
