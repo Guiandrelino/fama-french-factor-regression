@@ -21,12 +21,16 @@ from factorlab.research import (
     validate_panel,
     walk_forward,
 )
+from factorlab.ui import context_strip, setup_terminal, welcome_cards
 
-st.set_page_config(page_title="FactorLab · Pesquisa", layout="wide")
-st.title("Pesquisa · ativos, carteiras e modelos")
+st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="▥", layout="wide")
+setup_terminal("Portfolio & multi-asset")
+st.title("Portfolio & Multi-Asset Research")
 st.caption("Amostra mensal comum para todos os ativos e modelos selecionados.")
 
 with st.sidebar:
+    st.markdown("### ▥ Portfolio controls")
+    st.caption("UNIVERSO / ALOCAÇÃO / MODELOS")
     market = st.selectbox("Mercado / moeda", ["EUA / USD", "Brasil / BRL"])
     source = st.radio("Dados", ["Demonstração", "Yahoo Finance", "CSV de retornos"])
     tickers_text = st.text_input("Ativos separados por vírgula", "AAPL, MSFT, SPY, IWM")
@@ -196,8 +200,27 @@ if run:
         logging.getLogger(__name__).exception("Falha na pesquisa")
         st.error(f"Pesquisa não concluída: {exc}")
 
+if "study" not in st.session_state:
+    context_strip(
+        [
+            ("WORKSPACE", "Multi-asset research"),
+            ("ALOCAÇÃO", "Long-only"),
+            ("AVALIAÇÃO", "Walk-forward"),
+            ("EXPORTAÇÃO", "HTML / PDF / ZIP"),
+        ]
+    )
+    welcome_cards()
+
 if "study" in st.session_state:
     study, metadata, extras, oos = st.session_state["study"]
+    context_strip(
+        [
+            ("UNIVERSO", metadata["parameters"]["market"]),
+            ("BENCHMARK", study.benchmark),
+            ("AMOSTRA", f"{len(study.returns)} meses"),
+            ("POLÍTICA", metadata["parameters"]["policy"]),
+        ]
+    )
     st.caption("Resultados da última execução; alterações nos controles exigem nova execução.")
     if metadata["parameters"]["synthetic"]:
         st.warning(

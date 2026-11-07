@@ -5,6 +5,7 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 COPY app.py ./
 COPY pages ./pages
+COPY .streamlit ./.streamlit
 RUN useradd -m app && mkdir -p /app/.cache && chown -R app:app /app
 USER app
 EXPOSE 8501

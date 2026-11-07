@@ -9,14 +9,16 @@ import streamlit as st
 
 from factorlab.data import demo_data, load_factors, load_prices, monthly_returns, read_returns_csv
 from factorlab.regression import MODELS, fit_model
+from factorlab.ui import context_strip, setup_terminal, welcome_cards
 
-st.set_page_config(page_title="FactorLab | Fama–French", page_icon="📊", layout="wide")
-st.title("FactorLab · Fama–French")
+st.set_page_config(page_title="FactorLab | Research Terminal", page_icon="▥", layout="wide")
+setup_terminal("Factor regression")
+st.title("Fama–French Research Terminal")
 st.caption("Exposição a fatores, alpha e diagnóstico econométrico · frequência mensal · USD")
 st.page_link(
     "pages/2_Pesquisa.py",
     label="Abrir Pesquisa: múltiplos ativos, carteira e relatórios",
-    icon="📊",
+    icon="↗",
 )
 
 
@@ -31,7 +33,8 @@ def french_data(model):
 
 
 with st.sidebar:
-    st.header("Configuração")
+    st.markdown("### ▥ Research controls")
+    st.caption("PARÂMETROS DA REGRESSÃO")
     source = st.radio("Fonte", ["Demonstração offline", "Yahoo Finance", "CSV próprio"])
     model = st.selectbox("Modelo", list(MODELS), index=2)
     ticker = st.text_input("Ticker americano", "SPY").strip().upper()
@@ -84,6 +87,15 @@ if run:
         st.error(f"Não foi possível concluir a análise: {exc}")
 
 if "analysis" not in st.session_state:
+    context_strip(
+        [
+            ("WORKSPACE", "Regressão de fatores"),
+            ("UNIVERSO", "EUA / USD"),
+            ("FREQUÊNCIA", "Mensal"),
+            ("INFERÊNCIA", "OLS + Newey–West"),
+        ]
+    )
+    welcome_cards()
     st.info("Escolha uma fonte e clique em Executar análise. A demonstração funciona sem internet.")
     st.markdown("""
 ### O que este projeto responde?
@@ -106,6 +118,14 @@ else:
     )
     if label.startswith("SINTÉTICO"):
         st.warning("Demonstração sintética: estes números não representam um ativo real.")
+    context_strip(
+        [
+            ("MODELO", result.model),
+            ("AMOSTRA", f"{len(result.data)} meses"),
+            ("PERÍODO", f"{result.data.index.min():%m/%Y} → {result.data.index.max():%m/%Y}"),
+            ("COVARIÂNCIA", f"HAC / {result.metrics['hac_lags']} lags"),
+        ]
+    )
     metrics = st.columns(4)
     metrics[0].metric("R² ajustado", f"{result.metrics['adjusted_r_squared']:.1%}")
     metrics[1].metric("Alpha mensal", f"{result.metrics['alpha_monthly']:.3%}")
