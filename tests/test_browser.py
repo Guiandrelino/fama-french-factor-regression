@@ -90,10 +90,21 @@ def test_csv_upload_and_download_in_browser(tmp_path):
                 assert "std_error_HAC" in exported.read_text()
                 page.locator('input[type="file"]').set_input_files(str(bad_csv))
                 page.get_by_text("bad.csv", exact=True).wait_for()
-                page.get_by_role("button", name="Executar análise").click()
-                page.get_by_text(
-                    "CSV deve conter as colunas date e return.", exact=False
-                ).wait_for()
+                # Upload e download podem disparar reruns assíncronos no Streamlit.
+                # Espere o rerun terminar antes de enviar um novo evento de botão.
+                page.locator('[data-testid="stStatusWidget"]').wait_for(state="hidden")
+                from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+                error = page.get_by_text("CSV deve conter as colunas date e return.", exact=False)
+                for attempt in range(3):
+                    page.get_by_role("button", name="Executar análise").click()
+                    try:
+                        error.wait_for(timeout=10000)
+                        break
+                    except PlaywrightTimeoutError:
+                        if attempt == 2:
+                            page.screenshot(path=str(tmp_path / "upload-failure.png"))
+                            raise
                 assert page.get_by_text("Alpha mensal", exact=True).count() == 0
                 page.goto(url + "/Pesquisa")
                 page.get_by_text("CSV de retornos", exact=True).click()
