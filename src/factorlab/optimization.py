@@ -7,7 +7,15 @@ from scipy.optimize import minimize
 from factorlab.research import validate_panel
 
 
-def optimize_portfolio(returns, max_weight=0.5, ridge=0.1, exposures=None, beta_bounds=None):
+def optimize_portfolio(
+    returns,
+    max_weight=0.5,
+    ridge=0.1,
+    exposures=None,
+    beta_bounds=None,
+    groups=None,
+    group_caps=None,
+):
     returns = validate_panel(returns)
     if len(returns) < 24 or not 0 < max_weight <= 1 or not 0 <= ridge <= 1:
         raise ValueError("Exige 24 meses, limite em (0,1] e regularização em [0,1].")
@@ -18,6 +26,11 @@ def optimize_portfolio(returns, max_weight=0.5, ridge=0.1, exposures=None, beta_
     covariance = (1 - ridge) * covariance + ridge * np.diag(np.diag(covariance))
     covariance += np.eye(n) * 1e-10
     constraints = [{"type": "eq", "fun": lambda w: w.sum() - 1}]
+    for group, cap in (group_caps or {}).items():
+        if groups is None or set(returns.columns) - set(groups) or not 0 <= cap <= 1:
+            raise ValueError("Grupos incompletos ou limite inválido.")
+        mask = np.array([groups[a] == group for a in returns.columns], dtype=float)
+        constraints.append({"type": "ineq", "fun": lambda w, m=mask, c=cap: c - w @ m})
     for factor, (low, high) in (beta_bounds or {}).items():
         if exposures is None or factor not in exposures or low > high:
             raise ValueError("Limites de beta ou exposições inválidos.")
