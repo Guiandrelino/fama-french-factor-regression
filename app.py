@@ -10,15 +10,15 @@ import streamlit as st
 from factorlab.data import demo_data, load_factors, load_prices, monthly_returns, read_returns_csv
 from factorlab.regression import MODELS, fit_model
 from factorlab.ui import context_strip, setup_terminal
+from ui.components import footer, format_chart, note, percent, section_header, styled_table
 
-st.set_page_config(page_title="FactorLab | Research Terminal", page_icon="▥", layout="wide")
-setup_terminal("Factor regression")
-st.title("FATOR / Estação de análise")
-st.caption("REGRESSÃO DE RETORNOS EXCEDENTES   •   MENSAL   •   USD   •   OLS / HAC")
+st.set_page_config(page_title="FactorLab | Research Terminal", page_icon="F", layout="wide")
+setup_terminal("Pesquisa de fatores / Regressão individual")
+st.title("Análise de fatores")
+st.caption("Retornos excedentes mensais · Estados Unidos / USD · Estimação OLS e inferência HAC")
 st.page_link(
     "pages/2_Pesquisa.py",
     label="Abrir Pesquisa: múltiplos ativos, carteira e relatórios",
-    icon="↗",
 )
 
 
@@ -31,7 +31,7 @@ def french_data(model):
 
 
 with st.sidebar:
-    st.markdown("### ▥ Research controls")
+    st.markdown("### Universo e parâmetros")
     st.caption("PARÂMETROS DA REGRESSÃO")
     source = st.radio("Fonte", ["Demonstração offline", "Yahoo Finance", "CSV próprio"])
     model = st.selectbox("Modelo", list(MODELS), index=2)
@@ -87,22 +87,18 @@ if run:
 if "analysis" not in st.session_state:
     context_strip(
         [
-            ("WORKSPACE", "Regressão de fatores"),
+            ("AMBIENTE", "Regressão de fatores"),
             ("UNIVERSO", "EUA / USD"),
             ("FREQUÊNCIA", "Mensal"),
             ("INFERÊNCIA", "OLS + Newey–West"),
         ]
     )
-    st.markdown(
-        '<div class="desk-command"><span>FATOR &lt;GO&gt;</span> CONFIGURE O UNIVERSO → EXECUTE → INSPECIONE O RISCO</div>',
-        unsafe_allow_html=True,
+    note(
+        "Defina o universo, execute a regressão e inspecione a evidência. Nenhum resultado é apresentado antes do cálculo."
     )
     left, right = st.columns([1.65, 1], gap="small")
     with left:
-        st.markdown(
-            '<div class="panel-title">01 / MATRIZ DE MODELOS <span>ESPECIFICAÇÕES DISPONÍVEIS</span></div>',
-            unsafe_allow_html=True,
-        )
+        section_header("Modelos disponíveis", "Especificação dos fatores")
         matrix = pd.DataFrame(
             {
                 name: {
@@ -113,17 +109,14 @@ if "analysis" not in st.session_state:
             }
         ).T
         matrix.index.name = "Modelo"
-        st.dataframe(matrix, width="stretch", height=245)
-        st.markdown('<div class="panel-title">02 / EQUAÇÃO DO MODELO</div>', unsafe_allow_html=True)
+        styled_table(matrix, width="stretch", height=245)
+        section_header("Estrutura econométrica")
         st.code("Ri − RF = α + β × F + ε", language=None)
         st.caption(
             "Alpha mensal em decimal · betas adimensionais · intervalos de 95% com covariância HAC."
         )
     with right:
-        st.markdown(
-            '<div class="panel-title">03 / TICKET DE PESQUISA <span>NÃO EXECUTADO</span></div>',
-            unsafe_allow_html=True,
-        )
+        section_header("Configuração da pesquisa", "Aguardando execução")
         ticket = pd.DataFrame(
             {
                 "Parâmetro": [
@@ -146,12 +139,13 @@ if "analysis" not in st.session_state:
                 ],
             }
         )
-        st.dataframe(ticket, hide_index=True, width="stretch", height=280)
-        st.warning("SEM RESULTADOS · configure os controles à esquerda e execute a análise.")
-    st.markdown('<div class="panel-title">04 / PROTOCOLO DE LEITURA</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="desk-protocol"><div><b>01 ORIGEM</b><br>Dados reais exigem rede. Demonstração é identificada como sintética.</div><div><b>02 INFERÊNCIA</b><br>IC do alpha incluindo zero não sustenta alpha diferente de zero.</div><div><b>03 RISCO</b><br>Inspecione resíduos e estabilidade. Ajuste histórico não é previsão.</div></div>',
-        unsafe_allow_html=True,
+        styled_table(ticket, hide_index=True, width="stretch", height=280)
+        st.info(
+            "Aguardando cálculo. Configure os parâmetros e execute a análise para visualizar os resultados."
+        )
+    section_header("Notas de leitura")
+    note(
+        "Confira a origem dos dados. Um intervalo de confiança do alpha contendo zero não sustenta alpha diferente de zero. Ajuste histórico não constitui previsão."
     )
 else:
     result, label, input_count, used_window = st.session_state["analysis"]
@@ -173,13 +167,13 @@ else:
         ]
     )
     metrics = st.columns(4)
-    metrics[0].metric("R² ajustado", f"{result.metrics['adjusted_r_squared']:.1%}")
-    metrics[1].metric("Alpha mensal", f"{result.metrics['alpha_monthly']:.3%}")
-    metrics[2].metric("Alpha anual (12 × α)", f"{result.metrics['alpha_annual_arithmetic']:.2%}")
-    metrics[3].metric("Vol. residual anualizada", f"{result.metrics['residual_vol_annual']:.2%}")
+    metrics[0].metric("R² ajustado", percent(result.metrics["adjusted_r_squared"], 1))
+    metrics[1].metric("Alpha mensal", percent(result.metrics["alpha_monthly"], 3))
+    metrics[2].metric("Alpha anual (12 × α)", percent(result.metrics["alpha_annual_arithmetic"], 2))
+    metrics[3].metric("Vol. residual anualizada", percent(result.metrics["residual_vol_annual"], 2))
     tabs = st.tabs(["Coeficientes", "Ajuste e resíduos", "Exposição móvel", "Dados e exportação"])
     with tabs[0]:
-        st.dataframe(result.coefficients.style.format("{:.5f}"), width="stretch")
+        styled_table(result.coefficients)
         plot = result.coefficients.drop(index="alpha").reset_index()
         plot["upper"] = plot["ci_95_high"] - plot["coefficient"]
         plot["lower"] = plot["coefficient"] - plot["ci_95_low"]
@@ -191,6 +185,7 @@ else:
             error_y_minus="lower",
             title="Exposições e intervalos de confiança de 95% (HAC)",
         )
+        fig.update_yaxes(title_text="Exposição · beta", tickformat=".2f")
         fig.add_hline(y=0, line_dash="dash")
         st.plotly_chart(fig, width="stretch")
         st.caption(
@@ -200,20 +195,29 @@ else:
     with tabs[1]:
         comparison = pd.concat([result.data["excess_return"], result.fitted], axis=1)
         st.plotly_chart(
-            px.line(comparison, title="Retorno excedente observado e ajustado"), width="stretch"
-        )
-        left, right = st.columns(2)
-        left.plotly_chart(px.line(result.residuals, title="Resíduos mensais"), width="stretch")
-        right.plotly_chart(
-            px.histogram(
-                result.residuals.to_frame(),
-                x="residual",
-                nbins=30,
-                title="Distribuição dos resíduos",
+            format_chart(
+                px.line(comparison, title="Retorno excedente observado e ajustado"), "percent"
             ),
             width="stretch",
         )
-        st.dataframe(pd.Series(result.diagnostics, name="valor").to_frame())
+        left, right = st.columns(2)
+        left.plotly_chart(
+            format_chart(px.line(result.residuals, title="Resíduos mensais"), "percent"),
+            width="stretch",
+        )
+        right.plotly_chart(
+            format_chart(
+                px.histogram(
+                    result.residuals.to_frame(),
+                    x="residual",
+                    nbins=30,
+                    title="Distribuição dos resíduos",
+                ),
+                "distribution",
+            ),
+            width="stretch",
+        )
+        styled_table(pd.Series(result.diagnostics, name="valor").to_frame())
         st.caption(
             "Jarque–Bera: normalidade; Breusch–Pagan: homocedasticidade; "
             "Ljung–Box: ausência de autocorrelação. p pequeno rejeita a hipótese nula. "
@@ -235,7 +239,7 @@ else:
             )
     with tabs[3]:
         observations = result.data.join(result.fitted).join(result.residuals)
-        st.dataframe(observations, width="stretch")
+        styled_table(observations, width="stretch")
         for filename, frame in [
             ("coefficients.csv", result.coefficients),
             ("observations.csv", observations),
@@ -248,7 +252,7 @@ else:
                 mime="text/csv",
             )
 
-st.divider()
+footer()
 st.caption(
     "Uso educacional e analítico, não recomendação de investimento. "
     "Fatores: Kenneth R. French Data Library (EUA). Preços: Yahoo Finance via yfinance. "

@@ -26,14 +26,16 @@ from factorlab.research import (
 from factorlab.research_ui import render_research_tools
 from factorlab.security import workspace_root
 from factorlab.ui import context_strip, setup_terminal, welcome_cards
+from ui.components import footer, format_chart, percent, styled_table
+from ui.theme import DIVERGING
 
-st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="▥", layout="wide")
-setup_terminal("Portfolio & multi-asset")
-st.title("Portfolio & Multi-Asset Research")
+st.set_page_config(page_title="FactorLab | Portfolio Research", page_icon="F", layout="wide")
+setup_terminal("Pesquisa de carteiras / Múltiplos ativos")
+st.title("Pesquisa de carteiras")
 st.caption("Amostra mensal comum para todos os ativos e modelos selecionados.")
 
 with st.sidebar:
-    st.markdown("### ▥ Portfolio controls")
+    st.markdown("### Universo e alocação")
     st.caption("UNIVERSO / ALOCAÇÃO / MODELOS")
     market = st.selectbox("Mercado / moeda", ["EUA / USD", "Brasil / BRL"])
     source = st.radio("Dados", ["Demonstração", "Yahoo Finance", "CSV de retornos"], index=1)
@@ -81,7 +83,7 @@ if st.button("Atualizar fatores agora"):
 status = cache_status()
 with st.expander("Qualidade e atualização das fontes"):
     if status:
-        st.dataframe(pd.DataFrame(status), width="stretch")
+        styled_table(pd.DataFrame(status), width="stretch")
         if any(row["stale"] for row in status):
             st.warning(
                 "Há cache com 7 dias ou mais. Atualize os fatores antes de uma nova análise."
@@ -93,7 +95,7 @@ if "quality_preview" in st.session_state:
     with st.expander("DATA QUALITY / Auditoria pré-regressão", expanded=True):
         for title, frame in st.session_state["quality_preview"].items():
             st.caption(title)
-            st.dataframe(frame, width="stretch")
+            styled_table(frame, width="stretch")
 
 if run or audit_only:
     st.session_state.pop("study", None)
@@ -186,7 +188,7 @@ if run or audit_only:
             if audit_only or (source != "Demonstração" and not quality_confirmed):
                 for title, frame in preview.items():
                     st.caption(title)
-                    st.dataframe(frame, width="stretch")
+                    styled_table(frame, width="stretch")
                 st.info(
                     "Revise as observações. Confirme a revisão e clique em Executar pesquisa. Nenhum valor foi corrigido."
                 )
@@ -273,9 +275,9 @@ if run or audit_only:
 if "study" not in st.session_state:
     context_strip(
         [
-            ("WORKSPACE", "Multi-asset research"),
-            ("ALOCAÇÃO", "Long-only"),
-            ("AVALIAÇÃO", "Walk-forward"),
+            ("AMBIENTE", "Pesquisa de carteiras"),
+            ("ALOCAÇÃO", "Sem posições vendidas"),
+            ("AVALIAÇÃO", "Janelas temporais"),
             ("EXPORTAÇÃO", "HTML / PDF / ZIP"),
         ]
     )
@@ -320,7 +322,7 @@ if "study" in st.session_state:
         )
     if workspace == "VISÃO GERAL":
         with tabs[0]:
-            st.dataframe(study.summary, width="stretch")
+            styled_table(study.summary, width="stretch")
             selected = st.selectbox(
                 "Modelo do heatmap", list(study.summary.index.get_level_values("model").unique())
             )
@@ -329,7 +331,7 @@ if "study" in st.session_state:
                 px.imshow(
                     betas,
                     text_auto=".2f",
-                    color_continuous_scale="RdBu_r",
+                    color_continuous_scale=DIVERGING,
                     color_continuous_midpoint=0,
                     title="Exposições aos fatores",
                 ),
@@ -338,14 +340,16 @@ if "study" in st.session_state:
     if workspace == "VISÃO GERAL":
         with tabs[1]:
             st.plotly_chart(
-                px.line((1 + study.returns).cumprod(), title="Patrimônio normalizado · início = 1"),
+                format_chart(
+                    px.line((1 + study.returns).cumprod(), title="Evolução do patrimônio"), "wealth"
+                ),
                 width="stretch",
             )
             st.caption(
                 f"Benchmark: {study.benchmark}. Active return = 12 × média mensal da diferença; tracking error = desvio da diferença × √12."
             )
             if extras.get("portfolio_weights_beginning_of_month") is not None:
-                st.dataframe(extras["portfolio_weights_beginning_of_month"], width="stretch")
+                styled_table(extras["portfolio_weights_beginning_of_month"], width="stretch")
                 st.caption(
                     f"Política: {metadata['parameters']['policy']}. Pesos no início do mês. Sem custos, impostos ou aportes."
                 )
@@ -375,11 +379,12 @@ if "study" in st.session_state:
             if oos:
                 key = st.selectbox("Walk-forward", list(oos), format_func=lambda x: " · ".join(x))
                 frame = oos[key]
-                st.metric("RMSE fora da amostra", f"{np.sqrt(np.mean(frame.error**2)):.3%}")
+                st.metric("RMSE fora da amostra", percent(np.sqrt(np.mean(frame.error**2)), 3))
                 st.plotly_chart(
-                    px.line(frame[["actual_excess", "explained_excess"]]), width="stretch"
+                    format_chart(px.line(frame[["actual_excess", "explained_excess"]]), "percent"),
+                    width="stretch",
                 )
-                st.dataframe(frame, width="stretch")
+                styled_table(frame, width="stretch")
             else:
                 st.info("Amostra insuficiente: reduza a janela ou aumente o intervalo.")
             forecasts = {k: v for k, v in extras.items() if k.startswith("forecast_")}
@@ -390,18 +395,23 @@ if "study" in st.session_state:
             if forecasts:
                 chosen = st.selectbox("Previsão", list(forecasts))
                 predicted = forecasts[chosen]
-                st.metric("RMSE previsão", f"{np.sqrt(np.mean(predicted.error**2)):.3%}")
+                st.metric("RMSE previsão", percent(np.sqrt(np.mean(predicted.error**2)), 3))
                 st.metric(
                     "RMSE referência: média histórica",
-                    f"{np.sqrt(np.mean(predicted.baseline_error**2)):.3%}",
+                    percent(np.sqrt(np.mean(predicted.baseline_error**2)), 3),
                 )
                 st.plotly_chart(
-                    px.line(
-                        predicted[["actual_return", "predicted_return", "historical_mean_forecast"]]
+                    format_chart(
+                        px.line(
+                            predicted[
+                                ["actual_return", "predicted_return", "historical_mean_forecast"]
+                            ]
+                        ),
+                        "percent",
                     ),
                     width="stretch",
                 )
-                st.dataframe(predicted, width="stretch")
+                styled_table(predicted, width="stretch")
             else:
                 st.info("Amostra insuficiente para previsão defasada.")
     if workspace == "RISCO E CARTEIRA":
@@ -443,6 +453,7 @@ if "study" in st.session_state:
         st.json(metadata)
         st.caption("PDF gerado nativamente no servidor, sem navegador ou serviço externo.")
 
+footer()
 st.caption(
     "NEFIN (Brasil): fatores mensais value-weighted em BRL, CAPM/FF3/Carhart4; não oferece RMW/CMA neste dataset. Kenneth French (EUA): USD. Calendários NYSE/BMF via pandas-market-calendars."
 )

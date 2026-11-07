@@ -10,11 +10,12 @@ from factorlab.operations import EXECUTOR
 from factorlab.security import backup_database, purge_snapshots, restore_database, workspace_root
 from factorlab.storage import AnalysisStore
 from factorlab.uncertainty import allocation_sensitivity, bootstrap_risk, bootstrap_weights
+from ui.components import format_chart, styled_table
 
 
 def render_advanced(study, metadata, extras):
     section = st.radio(
-        "Workspace operacional",
+        "Módulo operacional",
         ["EXECUÇÃO", "INCERTEZA", "ALERTAS", "ADMINISTRAÇÃO"],
         horizontal=True,
     )
@@ -94,9 +95,12 @@ def render_advanced(study, metadata, extras):
                 st.info("Avaliação em background; consulte o andamento.")
                 st.button("Consultar avaliação")
         if "execution_returns" in extras:
-            st.plotly_chart(px.line((1 + extras["execution_returns"]).cumprod()), width="stretch")
-            st.dataframe(extras["execution_metrics"], width="stretch")
-            st.dataframe(extras["execution_cost_turnover"], width="stretch")
+            st.plotly_chart(
+                format_chart(px.line((1 + extras["execution_returns"]).cumprod()), "wealth"),
+                width="stretch",
+            )
+            styled_table(extras["execution_metrics"], width="stretch")
+            styled_table(extras["execution_cost_turnover"], width="stretch")
         st.caption(
             "Janelas sucessivas sem retornos futuros. Estratégia, benchmark e equiponderada líquidos usam os mesmos bps, incluindo entrada inicial; referências rebalanceiam mensalmente. Sharpe usa RF da amostra. Bandas podem violar limites entre rebalanceamentos."
         )
@@ -161,10 +165,10 @@ def render_advanced(study, metadata, extras):
                     extras["bootstrap_parameters"] = pd.DataFrame(
                         [st.session_state["bootstrap_parameters"]]
                     )
-                    st.dataframe(ci, width="stretch")
+                    styled_table(ci, width="stretch")
                     st.plotly_chart(px.box(draws), width="stretch")
-                    st.dataframe(weight_ci, width="stretch")
-                    st.dataframe(sensitivity, width="stretch")
+                    styled_table(weight_ci, width="stretch")
+                    styled_table(sensitivity, width="stretch")
                 except Exception as exc:
                     st.error(str(exc))
             else:
@@ -193,7 +197,7 @@ def render_advanced(study, metadata, extras):
                 stale=metadata.get("data_stale", False),
             )
             extras["exposure_alerts"] = alerts
-            st.dataframe(alerts, width="stretch")
+            styled_table(alerts, width="stretch")
             st.caption(
                 "Comparação descritiva. Verifique moeda, amostra e modelo da referência. Nenhum alerta dispara ordem."
             )

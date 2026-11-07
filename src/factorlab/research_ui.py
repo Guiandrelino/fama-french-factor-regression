@@ -10,6 +10,8 @@ from factorlab.optimization import holdout_optimization
 from factorlab.regression import fit_model
 from factorlab.risk import historical_stress, risk_decomposition, stress_scenario
 from factorlab.storage import AnalysisStore, compare_saved
+from ui.components import percent, styled_table
+from ui.theme import DIVERGING
 
 
 def render_research_tools(study, metadata, extras):
@@ -29,7 +31,7 @@ def render_research_tools(study, metadata, extras):
         table, metrics = risk_decomposition(result)
         cols = st.columns(3)
         for col, (name, value) in zip(cols, metrics.items(), strict=True):
-            col.metric(name.replace("_", " "), f"{value:.2%}")
+            col.metric(name.replace("_", " "), percent(value))
         st.plotly_chart(
             px.bar(
                 table.reset_index(),
@@ -39,7 +41,7 @@ def render_research_tools(study, metadata, extras):
             ),
             width="stretch",
         )
-        st.dataframe(table, width="stretch")
+        styled_table(table, width="stretch")
         st.caption(
             "Euler: beta × (Cov(fatores) × beta), mais variância residual. Inclui covariâncias; contribuições negativas são possíveis. Anualização ×12 pressupõe convenção sem autocovariâncias. Risco ex post, não previsão."
         )
@@ -63,8 +65,8 @@ def render_research_tools(study, metadata, extras):
                 / 100
             )
         table, impact = stress_scenario(result, shocks)
-        st.metric("Impacto sistemático mensal", f"{impact:.2%}")
-        st.dataframe(table, width="stretch")
+        st.metric("Impacto sistemático mensal", percent(impact))
+        styled_table(table, width="stretch")
         for name in list(extras):
             if name.startswith(("custom_stress_", "historical_stress_")):
                 del extras[name]
@@ -83,7 +85,7 @@ def render_research_tools(study, metadata, extras):
         }[historical]
         try:
             observed = historical_stress(result, start, end)
-            st.dataframe(observed, width="stretch")
+            styled_table(observed, width="stretch")
             extras[f"historical_stress_{key[0]}_{key[1]}_{historical}"] = observed.to_frame()
         except ValueError as exc:
             st.info(str(exc))
@@ -106,11 +108,11 @@ def render_research_tools(study, metadata, extras):
             "SQLite local compartilhado entre sessões deste servidor. Não armazene carteiras privadas em um deploy público sem autenticação. Excluir análise não remove snapshots de origem."
         )
         if not saved.empty:
-            st.dataframe(saved, width="stretch")
+            styled_table(saved, width="stretch")
             ids = saved.id.tolist()
             selected = st.selectbox("Análise armazenada", ids)
             loaded = store.load(selected)
-            st.dataframe(loaded["summary"], width="stretch")
+            styled_table(loaded["summary"], width="stretch")
             st.download_button(
                 "Exportar análise salva",
                 loaded["summary"].to_csv().encode(),
@@ -127,7 +129,7 @@ def render_research_tools(study, metadata, extras):
                 )
                 try:
                     delta = compare_saved(loaded, store.load(other))
-                    st.dataframe(delta, width="stretch")
+                    styled_table(delta, width="stretch")
                     extras["saved_comparison"] = delta
                 except ValueError as exc:
                     st.info(str(exc))
@@ -144,14 +146,18 @@ def render_research_tools(study, metadata, extras):
         correlation, vif, influence = advanced_diagnostics(result)
         st.plotly_chart(
             px.imshow(
-                correlation, text_auto=".2f", zmin=-1, zmax=1, color_continuous_scale="RdBu_r"
+                correlation,
+                text_auto=".2f",
+                zmin=-1,
+                zmax=1,
+                color_continuous_scale=DIVERGING,
             ),
             width="stretch",
         )
-        st.dataframe(vif.to_frame(), width="stretch")
-        st.dataframe(influence.sort_values("cooks_distance", ascending=False), width="stretch")
+        styled_table(vif.to_frame(), width="stretch")
+        styled_table(influence.sort_values("cooks_distance", ascending=False), width="stretch")
         sensitivity = hac_sensitivity(result)
-        st.dataframe(sensitivity, width="stretch")
+        styled_table(sensitivity, width="stretch")
         st.caption(
             "VIF alto sugere colinearidade. Cook > 4/n é triagem heurística, não motivo automático para excluir observações. Sensibilidade HAC altera inferência, não coeficientes OLS. Diagnósticos de influência são OLS convencionais."
         )
@@ -195,8 +201,8 @@ def render_research_tools(study, metadata, extras):
                 )
                 extras["optimized_weights"] = weights.to_frame()
                 extras["optimization_holdout"] = performance
-                st.dataframe(weights.to_frame(), width="stretch")
-                st.metric("Volatilidade estimada no treino", f"{vol:.2%}")
+                styled_table(weights.to_frame(), width="stretch")
+                st.metric("Volatilidade estimada no treino", percent(vol))
                 st.plotly_chart(
                     px.line(
                         (1 + performance).cumprod(),
@@ -204,7 +210,7 @@ def render_research_tools(study, metadata, extras):
                     ),
                     width="stretch",
                 )
-                st.dataframe(performance.std().mul(np.sqrt(12)).rename("vol_annual").to_frame())
+                styled_table(performance.std().mul(np.sqrt(12)).rename("vol_annual").to_frame())
                 st.download_button(
                     "Baixar pesos otimizados",
                     weights.to_csv().encode(),
