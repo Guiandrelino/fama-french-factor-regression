@@ -45,11 +45,11 @@ Integração usa versão mensal **value-weighted**, com retornos em frações, n
 
 ## Automação e Docker
 
-`.github/workflows/quality.yml`: Python 3.11/3.12/3.13, lint, formato e cobertura em push/PR; Chromium em job separado; live somente semanalmente ou por execução manual. Requer publicar o repositório no GitHub para executar. O workflow inclui build e smoke test Docker. Execução remota depende de um repositório GitHub configurado; a pasta local ainda não é repositório Git e não possui remote/autenticação configurados, portanto não foi possível disparar Actions remotamente.
+`.github/workflows/quality.yml`: Python 3.11/3.12/3.13, lint, formato e cobertura em push/PR; Chromium em job separado; live somente semanalmente ou por execução manual. Requer publicar o repositório no GitHub para executar. O workflow inclui build e smoke test Docker. Execução remota validada no repositório `Guiandrelino/fama-french-factor-regression`: [run 42396234673](https://github.com/Guiandrelino/fama-french-factor-regression/actions/runs/42396234673), com todos os jobs aprovados (Python 3.11/3.12/3.13, Chromium, Docker e live).
 
 ```sh
 docker build -t factorlab .
 docker run --rm -p 8501:8501 -v factorlab-cache:/app/.cache factorlab
 ```
 
-Imagem executa como usuário não root e tem healthcheck. Build local validado com `docker build -t factorlab:local .`; container iniciou, healthcheck ficou healthy, endpoint retornou ok e regressão + PDF nativo foram executados dentro dele. Container de validação foi removido ao final. Isso não equivale à execução remota de CI.
+Imagem executa como usuário não root e tem healthcheck. Build local validado com `docker build -t factorlab:local .`; container iniciou, healthcheck ficou healthy, endpoint retornou ok e regressão + PDF nativo foram executados dentro dele. Container de validação foi removido ao final. O build e smoke test do container também passaram remotamente no GitHub Actions.

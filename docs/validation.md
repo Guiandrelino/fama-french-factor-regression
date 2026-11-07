@@ -6,7 +6,7 @@
 - 23 testes live aprovados (20 combinações EUA e 3 Brasil) na última execução após adição de retry limitado com backoff. DNS continua sendo dependência externa; retries não garantem disponibilidade permanente.
 - Chromium aprovado, lint e formato aprovados.
 - Build Docker local concluído; container healthy, HTTP health `ok`, regressão e PDF nativo testados dentro do container.
-- GitHub Actions inclui smoke test Docker, mas execução remota bloqueada: diretório não é repositório Git e não há remote GitHub configurado. Não se declara CI remoto aprovado.
+- GitHub Actions executado remotamente com sucesso após configurar o repositório: [execução completa 42396234673](https://github.com/Guiandrelino/fama-french-factor-regression/actions/runs/42396234673), commit `988484c`. Aprovados Python 3.11/3.12/3.13, Chromium, container Docker e integração live. Corridas de rerun/upload do Streamlit observadas no Linux foram corrigidas com sincronização e tentativas limitadas no teste de navegador.
 - Previsão ex ante adicionada sem fatores contemporâneos. Ainda não é certificação de backtest investível point-in-time.
 
 ## Validação anterior · versão 0.2

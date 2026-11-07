@@ -8,6 +8,7 @@ __pycache__/
 outputs/
 install.log
 docker-build.log
+browser-ci.log
 playwright-report/
 test-results/
 .coverage
