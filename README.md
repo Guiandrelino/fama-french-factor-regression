@@ -6,6 +6,8 @@ Terminal de pesquisa quantitativa para **regressões de fatores, comparação de
 
 Usa dados reais de **Yahoo Finance**, **Kenneth French** e **NEFIN**, além de CSV próprio e demonstração sintética explicitamente identificada. Não é uma plataforma de cotações em tempo real nem de execução de ordens.
 
+> **[Checklist atual de publicação e evidências →](docs/RELEASE_CHECKLIST.md)** — prevalece sobre descrições históricas. Inclui navegação por estações, proteção de cache, avaliação com RF/custos, background limitado e deploy HTTPS. Não se declara prontidão universal sem homologação no ambiente real.
+
 > **[Documentação completa do projeto →](docs/PROJECT_GUIDE.md)** — arquitetura, instalação, metodologia, uso, fontes, persistência, relatórios, testes e limitações.
 
 ## Funcionalidades
